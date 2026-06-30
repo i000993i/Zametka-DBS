@@ -608,13 +608,22 @@ class MainWindow(QMainWindow):
         self._on_file_opened(path)
 
     def _open_handbook(self):
-        import os
-        handbook_path = os.path.join(
-            os.path.dirname(__file__), "..", "..",
-            "zametka_dbs", "markdown", "md_handbook.py"
-        )
-        if os.path.isfile(handbook_path):
-            self._on_file_opened(handbook_path)
+        from zametka_dbs.markdown.md_handbook import get_handbook
+        content = get_handbook()
+        self._untitled_counter += 1
+        path = f"__handbook_{self._untitled_counter}__"
+        self._open_tabs.append(path)
+        self._tab_state[path] = {
+            "content": content,
+            "cursor": (1, 1),
+            "scroll": 0,
+            "modified": False,
+        }
+        tidx = self._tab_bar.addTab("📖 Handbook.md")
+        self._tab_bar.setCurrentIndex(tidx)
+        self._tab_bar.setTabData(tidx, path)
+        self._switch_to_tab(tidx)
+        self.status_info.setText("Handbook opened")
 
     def _toggle_search(self):
         visible = self.search_widget.isVisible()

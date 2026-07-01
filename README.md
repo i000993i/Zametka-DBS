@@ -6,12 +6,12 @@
 ## Возможности
 
 - **Markdown-редактор** с предпросмотром (Ctrl+P)
-- **Подсветка синтаксиса** для 20+ языков (Python, JS, TS, HTML, CSS, Java, C++, C#, Go, Rust, SQL, Ruby, PHP, Swift, Kotlin, Dart, Lua, Shell, PowerShell, YAML, TOML, JSON, INI)
+- **Подсветка синтаксиса** для 20+ языков
 - **[[Вики-ссылки]]** с обратными связями (backlinks)
 - **Полнотекстовый поиск** по всем заметкам (TF-IDF, Rust)
 - **Прикрепление файлов/папок** (Pinned) — быстрый доступ к важному
 - **Дерево файлов** с навигацией как в VS Code
-- **Ежедневные заметки** (Daily Notes) с шаблонами
+- **Просмотр HTML** в браузере (Chromium, QWebEngineView)
 - **Сборка в единый `.exe`** — несмотря на Rust-ядро, всё упаковывается в один файл
 
 ## Ядро на Rust
@@ -58,11 +58,12 @@ python build.py
 
 ```
 zametka_dbs/
-├── core/          # Конфиг (Rust/Python)
-├── markdown/      # Вики-ссылки, шаблоны, handbook
-├── preview/       # Рендеринг Markdown (Rust/Python)
-├── search/        # Поиск (Rust/Python)
-└── ui/            # MainWindow, CodeEditor, Preview, FileTree, Pinned, Backlinks
+├── core/          # Конфиг, EventBus (Rust/Python)
+├── markdown/      # Вики-ссылки, шаблоны, Handbook
+├── preview/       # Рендеринг Markdown (Rust / markdown-it)
+├── search/        # Поиск (Rust / Python)
+└── ui/            # MainWindow, CodeEditor, Preview, FileTree, Pinned,
+                   # Backlinks, SearchWidget + HTML-браузер (QWebEngineView)
 
 zametka-core/      # Rust-ядро (PyO3)
 ├── src/
@@ -72,7 +73,26 @@ zametka-core/      # Rust-ядро (PyO3)
 │   └── language.rs
 ├── Cargo.toml
 └── pyproject.toml
+
+assets/
+└── svg/           # SVG-иконки
 ```
+
+## Архитектура
+
+```
+app.py
+  └── MainWindow (QMainWindow)
+        ├── Sidebar: Pinned | FileTree | Backlinks | Search
+        ├── Editor Area: TabBar (всегда виден) + Stack
+        │     ├── Page 0: CodeEditor + Preview (QSplitter)
+        │     └── Page 1: QWebEngineView (Chromium, для .html)
+        └── StatusBar
+```
+
+- **Rust-ядро**: компилируется в `.pyd` через PyO3 встраивается в Python
+- **Fallback**: каждый модуль сначала пробует `import zametka_core`; при ошибке — самодостаточная Python-реализация
+- **EventBus**: слабо связанная шина событий (pub/sub) для общения компонентов
 
 ## Конфигурация
 

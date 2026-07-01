@@ -20,6 +20,7 @@ from zametka_dbs.ui.preview_widget import PreviewWidget
 from zametka_dbs.ui.backlinks_panel import BacklinksPanel
 from zametka_dbs.ui.search_widget import SearchWidget
 from zametka_dbs.ui.pinned_widget import PinnedWidget
+from zametka_dbs.ui.html_browser import HtmlBrowser
 from zametka_dbs.markdown.wikilinks import LinkResolver, BacklinkIndex
 from zametka_dbs.search.engine import SearchEngine
 
@@ -110,16 +111,6 @@ class MainWindow(QMainWindow):
         self._vault_menu.clicked.connect(self._show_vault_menu)
         header_layout.addWidget(self._vault_menu)
 
-        self._daily_btn = QPushButton()
-        self._daily_btn.setIcon(icon("calendar"))
-        self._daily_btn.setIconSize(QSize(14, 14))
-        self._daily_btn.setObjectName("icon-btn")
-        self._daily_btn.setFixedSize(22, 22)
-        self._daily_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._daily_btn.setToolTip("Open today's daily note")
-        self._daily_btn.clicked.connect(self._open_daily_note)
-        header_layout.addWidget(self._daily_btn)
-
         self._help_btn = QPushButton()
         self._help_btn.setIcon(icon("file-text"))
         self._help_btn.setIconSize(QSize(14, 14))
@@ -148,15 +139,12 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.search_widget)
 
     def _create_editor_area(self):
-        self._main_stack = QStackedWidget()
+        self._editor_container = QWidget()
+        container_layout = QVBoxLayout(self._editor_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
 
-        # Page 0: Editor + Preview
-        self._editor_page = QWidget()
-        editor_layout = QVBoxLayout(self._editor_page)
-        editor_layout.setContentsMargins(0, 0, 0, 0)
-        editor_layout.setSpacing(0)
-
-        # Tab bar
+        # Tab bar (always visible)
         tab_row = QWidget()
         tab_row.setObjectName("tab-row")
         tab_row.setFixedHeight(34)
@@ -206,9 +194,29 @@ class MainWindow(QMainWindow):
         self._preview_toggle_btn.clicked.connect(self._toggle_preview)
         tab_row_layout.addWidget(self._preview_toggle_btn)
 
-        editor_layout.addWidget(tab_row)
+        # HTML render toggle button
+        self._html_toggle_btn = QPushButton()
+        self._html_toggle_btn.setIcon(icon("eye"))
+        self._html_toggle_btn.setIconSize(QSize(14, 14))
+        self._html_toggle_btn.setObjectName("tab-btn")
+        self._html_toggle_btn.setFixedHeight(24)
+        self._html_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._html_toggle_btn.setToolTip("Просмотр HTML")
+        self._html_toggle_btn.setVisible(False)
+        self._html_toggle_btn.clicked.connect(self._toggle_html_view)
+        tab_row_layout.addWidget(self._html_toggle_btn)
 
-        # Splitter: Editor | Preview
+        container_layout.addWidget(tab_row)
+
+        # Stack: Editor page | Browser page
+        self._main_stack = QStackedWidget()
+
+        # Page 0: Editor + Preview
+        self._editor_page = QWidget()
+        editor_layout = QVBoxLayout(self._editor_page)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(0)
+
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setHandleWidth(1)
 
@@ -223,8 +231,14 @@ class MainWindow(QMainWindow):
         editor_layout.addWidget(self.splitter)
         self._main_stack.addWidget(self._editor_page)
 
+        # Page 1: WebEngine browser for HTML preview
+        self._browser = HtmlBrowser()
+        self._main_stack.addWidget(self._browser)
+
+        container_layout.addWidget(self._main_stack, 1)
+
         self._main_stack.setCurrentIndex(0)
-        self.editor_area = self._main_stack
+        self.editor_area = self._editor_container
 
     def _create_status_bar(self):
         self.status_bar = QStatusBar()
@@ -239,7 +253,7 @@ class MainWindow(QMainWindow):
         self._search_btn = QPushButton(" Search")
         self._search_btn.setIcon(icon("search"))
         self._search_btn.setIconSize(QSize(14, 14))
-        self._search_btn.setObjectName("graph-btn")
+        self._search_btn.setObjectName("search-btn")
         self._search_btn.setFixedHeight(20)
         self._search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._search_btn.clicked.connect(self._toggle_search)
@@ -498,6 +512,14 @@ class MainWindow(QMainWindow):
 
         self.preview.update_content(state["content"])
 
+        is_html = path and not is_untitled and path.lower().endswith((".html", ".htm"))
+        self._html_toggle_btn.setVisible(is_html)
+        if self._main_stack.currentIndex() == 1:
+            if is_html and path and os.path.isfile(path):
+                self._browser.load_file(os.path.abspath(path))
+            else:
+                self._main_stack.setCurrentIndex(0)
+
     def _on_pinned_item_clicked(self, path: str):
         if os.path.isfile(path):
             self._on_file_opened(path)
@@ -596,17 +618,6 @@ class MainWindow(QMainWindow):
             self._init_vault(dir_path)
             self.status_info.setText(f"Vault: {dir_path}")
 
-    def _open_daily_note(self):
-        config = get_config()
-        vault_path = config.get("vault_path", "")
-        if not vault_path or not os.path.isdir(vault_path):
-            self.status_info.setText("No vault opened")
-            return
-
-        from zametka_dbs.markdown.templates import create_daily_note
-        path = create_daily_note(vault_path)
-        self._on_file_opened(path)
-
     def _open_handbook(self):
         from zametka_dbs.markdown.md_handbook import get_handbook
         content = get_handbook()
@@ -635,8 +646,16 @@ class MainWindow(QMainWindow):
         else:
             self.backlinks_panel.setVisible(self._backlinks_visible)
 
-    def _toggle_graph(self):
-        pass
+    def _toggle_html_view(self):
+        if self._main_stack.currentIndex() == 0:
+            path = self._current_file
+            if path and os.path.isfile(path):
+                self._browser.load_file(os.path.abspath(path))
+            self._main_stack.setCurrentIndex(1)
+            self._html_toggle_btn.setToolTip("Показать исходный код")
+        else:
+            self._main_stack.setCurrentIndex(0)
+            self._html_toggle_btn.setToolTip("Просмотр HTML")
 
     def _toggle_preview(self):
         """Toggle preview pane visibility."""
@@ -700,6 +719,7 @@ class MainWindow(QMainWindow):
                 self._tab_state[self._current_file]["modified"] = True
 
     def _load_stylesheet(self) -> str:
+        close_icon = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "svg", "x.svg").replace("\\", "/")
         return """
             QMainWindow {
                 background-color: #0a0a0a;
@@ -763,6 +783,7 @@ class MainWindow(QMainWindow):
             }
             QTabBar#editor-tabs::close-button {
                 background-color: transparent;
+                image: url(""" + close_icon + """);
                 width: 16px;
                 height: 16px;
                 margin: 0 2px;
@@ -832,7 +853,7 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
                 padding: 0 8px;
             }
-            QPushButton#graph-btn {
+            QPushButton#search-btn {
                 background-color: #1a1a1a;
                 color: #808080;
                 border: none;
@@ -840,7 +861,7 @@ class MainWindow(QMainWindow):
                 padding: 0 8px;
                 font-size: 11px;
             }
-            QPushButton#graph-btn:hover {
+            QPushButton#search-btn:hover {
                 background-color: #2a2a2a;
                 color: #eeeeee;
             }

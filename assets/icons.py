@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, QByteArray, QRectF
 from PyQt6.QtGui import QIcon, QPixmap, QPainter
 from PyQt6.QtSvg import QSvgRenderer
 
-_ICON_DIR = os.path.join(os.path.dirname(__file__), "icons")
+_ICON_DIR = os.path.join(os.path.dirname(__file__), "svg")
 _SIZES = (16, 24, 32, 48, 64)
 
 

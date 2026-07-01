@@ -22,7 +22,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=_rust_binaries,
     datas=[
-        (str(ROOT / "assets" / "icons"), "assets/icons"),
+        (str(ROOT / "assets" / "svg"), "assets/svg"),
         (str(ROOT / "assets" / "app_icon.ico"), "assets"),
     ],
     hiddenimports=[

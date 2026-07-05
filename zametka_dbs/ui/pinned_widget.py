@@ -1,0 +1,306 @@
+import os
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QPushButton, QLabel, QMenu, QFileDialog
+)
+from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+
+from assets.icons import icon
+from zametka_dbs.core.config import get_config
+
+from zametka_core import detect_language as _rust_detect, scan_folder_languages as _rust_scan
+
+
+def _detect_folder_languages(folder_path: str, max_depth: int = 2):
+    return _rust_scan(folder_path, max_depth)
+
+
+class PinnedWidget(QWidget):
+    item_clicked = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("pinned-widget")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QWidget()
+        header.setObjectName("pinned-header")
+        header.setFixedHeight(24)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(10, 0, 6, 0)
+        header_layout.setSpacing(4)
+
+        header_icon = QLabel()
+        header_icon.setPixmap(icon("link").pixmap(12, 12))
+        header_icon.setFixedWidth(16)
+        header_layout.addWidget(header_icon)
+
+        header_label = QLabel("PINNED")
+        header_label.setObjectName("pinned-label")
+        header_layout.addWidget(header_label)
+
+        header_layout.addStretch()
+
+        self._pin_btn = QPushButton()
+        self._pin_btn.setIcon(icon("circle"))
+        self._pin_btn.setIconSize(QSize(12, 12))
+        self._pin_btn.setObjectName("pinned-add-btn")
+        self._pin_btn.setFixedSize(18, 18)
+        self._pin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pin_btn.setToolTip("Pin a file or folder")
+        self._pin_btn.clicked.connect(self._show_pin_menu)
+        header_layout.addWidget(self._pin_btn)
+
+        layout.addWidget(header)
+
+        self._list = QListWidget()
+        self._list.setObjectName("pinned-list")
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._show_context_menu)
+        self._list.itemClicked.connect(self._on_item_clicked)
+        self._list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+        self._list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self._list.model().rowsMoved.connect(self._sync_list_to_config)
+        layout.addWidget(self._list)
+
+        self._load_pins()
+
+    def _show_pin_menu(self):
+        menu = QMenu(self)
+
+        act_file = QAction("Pin file...", self)
+        act_file.triggered.connect(self._pin_file_dialog)
+        menu.addAction(act_file)
+
+        act_folder = QAction("Pin folder...", self)
+        act_folder.triggered.connect(self._pin_folder_dialog)
+        menu.addAction(act_folder)
+
+        menu.exec(self._pin_btn.mapToGlobal(self._pin_btn.rect().bottomLeft()))
+
+    def _pin_file_dialog(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Pin file", "",
+            "All Files (*.*)"
+        )
+        if path:
+            self._add_pin(path)
+
+    def _pin_folder_dialog(self):
+        folder = QFileDialog.getExistingDirectory(
+            self, "Pin folder", "",
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if folder:
+            self._add_pin(folder)
+
+    def _add_pin(self, path: str):
+        config = get_config()
+        pinned = config.get("pinned.items", [])
+        if path not in pinned:
+            pinned.append(path)
+            config.set("pinned.items", pinned)
+        self._load_pins()
+
+    def _remove_pin(self, path: str):
+        config = get_config()
+        pinned = config.get("pinned.items", [])
+        if path in pinned:
+            pinned.remove(path)
+            config.set("pinned.items", pinned)
+        self._load_pins()
+
+    def _load_pins(self):
+        self._list.clear()
+        config = get_config()
+        pinned = config.get("pinned.items", [])
+        has_items = False
+        for path in pinned:
+            if not os.path.exists(path):
+                continue
+            self._add_item(path)
+            has_items = True
+        self._list.setVisible(has_items)
+
+    def _add_item(self, path: str):
+        name = os.path.basename(path) or path
+        is_dir = os.path.isdir(path)
+
+        badges = []
+        if is_dir:
+            langs = _detect_folder_languages(path)
+            for lang_name, color in langs:
+                badges.append((lang_name, color))
+        else:
+            result = _rust_detect(path)
+            if result:
+                badges.append(result)
+
+        widget = QWidget()
+        widget.setObjectName("pinned-item")
+        row = QHBoxLayout(widget)
+        row.setContentsMargins(8, 2, 8, 2)
+        row.setSpacing(6)
+
+        ico_label = QLabel()
+        if is_dir:
+            ico_label.setPixmap(icon("folder").pixmap(14, 14))
+        else:
+            ico_label.setPixmap(icon("file").pixmap(14, 14))
+        ico_label.setFixedWidth(18)
+        row.addWidget(ico_label)
+
+        name_label = QLabel(name)
+        name_label.setObjectName("pinned-name")
+        name_label.setStyleSheet("font-size: 12px;")
+        row.addWidget(name_label, 1)
+
+        for lang_name, color in badges:
+            badge = QLabel(lang_name)
+            badge.setStyleSheet(
+                f"background-color: {color}; color: #ffffff; "
+                f"font-size: 9px; font-weight: 600; padding: 1px 5px; "
+                f"border-radius: 3px;"
+            )
+            row.addWidget(badge)
+
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, path)
+        item.setSizeHint(widget.sizeHint())
+        self._list.addItem(item)
+        self._list.setItemWidget(item, widget)
+
+    def _on_item_clicked(self, item: QListWidgetItem):
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if path:
+            self.item_clicked.emit(path)
+
+    def _show_context_menu(self, pos):
+        item = self._list.itemAt(pos)
+        if not item:
+            return
+        path = item.data(Qt.ItemDataRole.UserRole)
+        row = self._list.row(item)
+        menu = QMenu(self)
+
+        act_unpin = QAction("Unpin", self)
+        act_unpin.triggered.connect(lambda: self._remove_pin(path))
+        menu.addAction(act_unpin)
+
+        menu.addSeparator()
+
+        act_move_up = QAction("Move Up", self)
+        act_move_up.setEnabled(row > 0)
+        act_move_up.triggered.connect(lambda: self._move_item(row, -1))
+        menu.addAction(act_move_up)
+
+        act_move_down = QAction("Move Down", self)
+        act_move_down.setEnabled(row < self._list.count() - 1)
+        act_move_down.triggered.connect(lambda: self._move_item(row, 1))
+        menu.addAction(act_move_down)
+
+        menu.addSeparator()
+
+        act_clean = QAction("Remove missing paths", self)
+        act_clean.triggered.connect(self._clean_missing)
+        menu.addAction(act_clean)
+
+        menu.exec(self._list.viewport().mapToGlobal(pos))
+
+    def _move_item(self, row: int, direction: int):
+        target = row + direction
+        if target < 0 or target >= self._list.count():
+            return
+        item = self._list.takeItem(row)
+        self._list.insertItem(target, item)
+        self._list.setCurrentRow(target)
+        self._sync_list_to_config()
+
+    def _sync_list_to_config(self):
+        config = get_config()
+        paths = []
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            p = item.data(Qt.ItemDataRole.UserRole)
+            if p:
+                paths.append(p)
+        config.set("pinned.items", paths)
+
+    def _clean_missing(self):
+        config = get_config()
+        pinned = config.get("pinned.items", [])
+        pinned = [p for p in pinned if os.path.exists(p)]
+        config.set("pinned.items", pinned)
+        self._load_pins()
+
+    def _styles(self) -> str:
+        return """
+            QWidget#pinned-header {
+                border-bottom: 1px solid #1a1a1a;
+                background-color: #0a0a0a;
+            }
+            QLabel#pinned-label {
+                color: #808080;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 1px;
+            }
+            QPushButton#pinned-add-btn {
+                background-color: transparent;
+                color: #808080;
+                border: none;
+                border-radius: 2px;
+                font-size: 11px;
+            }
+            QPushButton#pinned-add-btn:hover {
+                background-color: #1a1a1a;
+                color: #eeeeee;
+            }
+            QWidget#pinned-item {
+                background-color: transparent;
+            }
+            QListWidget#pinned-list {
+                background-color: #0a0a0a;
+                border: none;
+                color: #eeeeee;
+                font-size: 12px;
+                outline: none;
+                max-height: 200px;
+            }
+            QListWidget#pinned-list::item {
+                padding: 0;
+                border: none;
+            }
+            QListWidget#pinned-list::item:hover {
+                background-color: #1a1a1a;
+            }
+            QListWidget#pinned-list::item:selected {
+                background-color: #1a1a1a;
+            }
+            QListWidget#pinned-list QScrollBar:vertical {
+                background-color: #0a0a0a;
+                width: 6px;
+                margin: 0;
+            }
+            QListWidget#pinned-list QScrollBar::handle:vertical {
+                background-color: #1a1a1a;
+                min-height: 20px;
+                border-radius: 3px;
+            }
+            QListWidget#pinned-list QScrollBar::handle:vertical:hover {
+                background-color: #2a2a2a;
+            }
+            QListWidget#pinned-list QScrollBar::add-line:vertical,
+            QListWidget#pinned-list QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+            QListWidget#pinned-list QScrollBar::add-page:vertical,
+            QListWidget#pinned-list QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """

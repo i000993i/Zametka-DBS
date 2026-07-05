@@ -1,0 +1,49 @@
+import logging
+import re
+
+logger = logging.getLogger(__name__)
+
+try:
+    from zametka_core import render_markdown as _rust_render
+    from zametka_core import resolve_wikilinks as _rust_resolve_wikilinks
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
+from zametka_dbs.preview.styles import PREVIEW_CSS, empty_preview, process_tags, process_callouts
+
+
+_WIKILINK_HTML_RE = re.compile(
+    r'<a\s+href="([^"]+)"[^>]*>\[\[([^\]]+)\]\]</a>'
+)
+
+
+def _py_resolve_wikilinks(html: str, note_map: dict) -> str:
+    def _replace(m):
+        href = m.group(1)
+        display = m.group(2)
+        target = href.strip("/").replace("\\", "/")
+        if target in note_map:
+            resolved = note_map[target]
+            return f'<a href="{resolved}">{display}</a>'
+        return m.group(0)
+    return _WIKILINK_HTML_RE.sub(_replace, html)
+
+
+def render_markdown(text: str, note_map: dict | None = None) -> str:
+    if not text:
+        return empty_preview()
+    if _HAS_RUST:
+        html = _rust_render(text)
+    else:
+        from markdown_it import MarkdownIt
+        md = MarkdownIt("default", {"breaks": True, "linkify": True})
+        html = md.render(text)
+    html = process_tags(html)
+    html = process_callouts(html)
+    if note_map:
+        if _HAS_RUST:
+            html = _rust_resolve_wikilinks(html, note_map)
+        else:
+            html = _py_resolve_wikilinks(html, note_map)
+    return PREVIEW_CSS + html

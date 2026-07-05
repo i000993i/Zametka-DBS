@@ -14,7 +14,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 from urllib.request import urlopen, Request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 from PyQt6.QtWidgets import (
     QApplication, QWizard, QWizardPage, QVBoxLayout, QHBoxLayout,
@@ -29,10 +29,15 @@ REPO_URL = "https://github.com/i000993i/Zametka-DBS"
 
 
 def _get_latest_release():
-    req = Request(API_URL, headers={"User-Agent": "Zametka-Installer/1.0", "Accept": "application/json"})
-    ctx = ssl.create_default_context()
-    resp = urlopen(req, timeout=15, context=ctx)
-    return json.loads(resp.read().decode("utf-8"))
+    try:
+        req = Request(API_URL, headers={"User-Agent": "Zametka-Installer/1.0", "Accept": "application/json"})
+        ctx = ssl.create_default_context()
+        resp = urlopen(req, timeout=15, context=ctx)
+        return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        if e.code == 404:
+            return {"tag_name": "master", "zipball_url": REPO_URL + "/archive/master.zip"}
+        raise
 
 
 class DownloadThread(QThread):

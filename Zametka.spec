@@ -3,6 +3,7 @@
 import sys
 import os
 from pathlib import Path
+from PyInstaller.building.api import COLLECT
 
 BLOCK_CIPHER = None
 
@@ -64,4 +65,14 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(ROOT / "assets" / "app_icon.ico"),
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name="Zametka",
 )

@@ -10,11 +10,78 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from assets.icons import icon
 from zametka_dbs.core.config import get_config
 
-from zametka_core import detect_language as _rust_detect, scan_folder_languages as _rust_scan
+try:
+    from zametka_core import detect_language as _rust_detect, scan_folder_languages as _rust_scan
+    _HAS_CORE = True
+except ImportError:
+    _HAS_CORE = False
+
+_LANG_MAP = {
+    ".py": ("Python", "#9d7cd8"), ".pyw": ("Python", "#9d7cd8"),
+    ".js": ("JavaScript", "#f0db4f"), ".mjs": ("JavaScript", "#f0db4f"),
+    ".jsx": ("JavaScript", "#f0db4f"), ".ts": ("TypeScript", "#3178c6"),
+    ".tsx": ("TypeScript", "#3178c6"), ".html": ("HTML", "#e34f26"),
+    ".htm": ("HTML", "#e34f26"), ".css": ("CSS", "#1572b6"),
+    ".java": ("Java", "#b07219"), ".c": ("C", "#555555"),
+    ".cpp": ("C++", "#f34b7d"), ".h": ("C", "#555555"),
+    ".hpp": ("C++", "#f34b7d"), ".cs": ("C#", "#178600"),
+    ".go": ("Go", "#00add8"), ".rs": ("Rust", "#dea584"),
+    ".sql": ("SQL", "#e38c00"), ".rb": ("Ruby", "#701516"),
+    ".php": ("PHP", "#4f5d95"), ".swift": ("Swift", "#f05138"),
+    ".kt": ("Kotlin", "#7f52ff"), ".dart": ("Dart", "#00d2b8"),
+    ".lua": ("Lua", "#000080"), ".sh": ("Shell", "#4eaa25"),
+    ".bash": ("Shell", "#4eaa25"), ".ps1": ("PowerShell", "#012456"),
+    ".yaml": ("YAML", "#cb171e"), ".yml": ("YAML", "#cb171e"),
+    ".toml": ("TOML", "#9c4221"), ".json": ("JSON", "#292929"),
+    ".md": ("Markdown", "#083fa1"), ".txt": ("Text", "#808080"),
+}
+
+
+def _detect_language_py(filepath: str):
+    import os
+    _, ext = os.path.splitext(filepath)
+    return _LANG_MAP.get(ext.lower())
+
+
+def _scan_folder_languages_py(folder_path: str, max_depth: int = 2):
+    import os
+    from collections import Counter
+    ext_count: Counter = Counter()
+    for root, dirs, files in os.walk(folder_path):
+        depth = root.replace(folder_path, "").count(os.sep)
+        if depth > max_depth:
+            dirs.clear()
+            continue
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "__pycache__")]
+        for f in files:
+            _, ext = os.path.splitext(f)
+            if ext:
+                ext_count[ext.lower()] += 1
+    lang_count: Counter = Counter()
+    for ext, count in ext_count.items():
+        info = _LANG_MAP.get(ext)
+        if info:
+            lang_count[info[0]] += count
+    top5 = [lang for lang, _ in lang_count.most_common(5)]
+    result = []
+    for lang in top5:
+        for ext, info in _LANG_MAP.items():
+            if info[0] == lang:
+                result.append(info)
+                break
+    return result
 
 
 def _detect_folder_languages(folder_path: str, max_depth: int = 2):
-    return _rust_scan(folder_path, max_depth)
+    if _HAS_CORE:
+        return _rust_scan(folder_path, max_depth)
+    return _scan_folder_languages_py(folder_path, max_depth)
+
+
+def _detect_language(filepath: str):
+    if _HAS_CORE:
+        return _rust_detect(filepath)
+    return _detect_language_py(filepath)
 
 
 class PinnedWidget(QWidget):
@@ -137,7 +204,7 @@ class PinnedWidget(QWidget):
             for lang_name, color in langs:
                 badges.append((lang_name, color))
         else:
-            result = _rust_detect(path)
+            result = _detect_language(path)
             if result:
                 badges.append(result)
 

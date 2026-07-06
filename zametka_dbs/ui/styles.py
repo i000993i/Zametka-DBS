@@ -110,6 +110,10 @@ def the_stylesheet(theme: str = "dark") -> str:
             subcontrol-position: right;
             padding: 0 4px;
         }}
+        QTabBar#editor-tabs::close-button:hover {{
+            background-color: {v["bg3"]};
+            border-radius: 2px;
+        }}
         QPushButton#tab-btn {{
             background-color: transparent;
             color: {v["fg1"]};

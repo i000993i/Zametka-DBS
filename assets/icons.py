@@ -8,7 +8,7 @@ _ICON_DIR = os.path.join(os.path.dirname(__file__), "svg")
 _SIZES = (16, 24, 32, 48, 64)
 
 
-def icon(name, color="#808080", hover_color="#eeeeee", size=None):
+def icon(name, color="#555555", hover_color="#111111", size=None):
     path = os.path.join(_ICON_DIR, f"{name}.svg")
     if not os.path.isfile(path):
         return QIcon()

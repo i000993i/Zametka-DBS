@@ -88,7 +88,8 @@ class _TreeBranchStyle(QProxyStyle):
             has_children = bool(option.state & QStyle.StateFlag.State_Children)
 
             painter.save()
-            painter.setPen(QPen(QColor("#3a3a3a"), 1))
+            v = _THEME_VARS["dark" if self._dark else "light"]
+            painter.setPen(QPen(QColor(v["border2"]), 1))
             painter.setBrush(Qt.BrushStyle.NoBrush)
 
             if has_sibling:
@@ -107,7 +108,8 @@ class _TreeBranchStyle(QProxyStyle):
                 else:
                     tri = [QPointF(cx - w, cy - h), QPointF(cx - w, cy + h), QPointF(cx + w, cy)]
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor("#888888"))
+                v = _THEME_VARS["dark" if self._dark else "light"]
+                painter.setBrush(QColor(v["fg1"]))
                 painter.drawPolygon(*tri)
 
             painter.restore()
@@ -426,27 +428,3 @@ class FileTreeWidget(QTreeView):
             os.rename(src_path, dst_path)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to move file: {e}")
-
-    def _styles(self) -> str:
-        return """
-            QTreeView {
-                background-color: #0a0a0a;
-                border: none;
-                color: #b0b0b0;
-                font-size: 13px;
-                outline: none;
-            }
-            QTreeView::item {
-                padding: 3px 8px 3px 4px;
-                min-height: 24px;
-            }
-            QTreeView::item:hover {
-                background-color: #1a1a1a;
-                color: #eeeeee;
-            }
-            QTreeView::item:selected {
-                background-color: #1a1a1a;
-                color: #fab283;
-                border-left: 2px solid #fab283;
-            }
-        """

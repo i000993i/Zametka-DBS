@@ -13,6 +13,8 @@ from zametka_dbs.ui.code_editor import CodeEditor
 from zametka_dbs.preview.renderer import render_markdown
 from zametka_dbs.core.badges import detect_file_badges, get_assigned_badges, badge_stylesheet
 from zametka_dbs.preview.styles import PREVIEW_CSS
+from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
 
 
 class NoteWindow(QMainWindow):
@@ -30,7 +32,7 @@ class NoteWindow(QMainWindow):
         self.setMinimumSize(700, 500)
         self.resize(950, 650)
 
-        self.setStyleSheet("background-color: #0d1117; color: #c9d1d9;")
+        # set in _update_styles
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -41,6 +43,21 @@ class NoteWindow(QMainWindow):
         self._setup_toolbar(filepath)
         self._setup_content(layout, filepath)
         self._load_file(filepath)
+        self._update_styles()
+
+    def _on_theme_changed(self, theme: str, **kwargs):
+        self._dark = theme == 'dark'
+        self._update_styles()
+
+    def _update_styles(self):
+        v = _THEME_VARS['dark' if self._dark else 'light']
+        self.setStyleSheet(f'background-color: {v["bg0"]}; color: {v["fg0"]};')
+        self._toolbar.setStyleSheet(f'background: {v["bg1"]}; border-bottom: 1px solid {v["border"]};')
+        self._title_label.setStyleSheet(f'color: {v["fg0"]}; font-weight: 600; font-size: 12px;')
+        if hasattr(self, '_browser') and self._browser:
+            self._browser.setStyleSheet(f'background-color: {v["bg0"]}; color: {v["fg0"]}; border: none; font-size: 14px; padding: 12px;')
+        if hasattr(self, '_text') and self._text:
+            self._text.setStyleSheet(f'background-color: {v["bg0"]}; color: {v["fg0"]}; border: none; font-family: "Cascadia Code", Consolas, monospace; font-size: 14px; padding: 12px;')
 
     def set_note_map(self, note_map: dict):
         self._note_map = note_map
@@ -49,29 +66,13 @@ class NoteWindow(QMainWindow):
         tb = QToolBar("Note")
         tb.setMovable(False)
         tb.setIconSize(QSize(14, 14))
-        tb.setStyleSheet("""
-            QToolBar {
-                background: #161b22;
-                border-bottom: 1px solid #21262d;
-                padding: 2px 4px;
-                spacing: 4px;
-            }
-            QToolButton {
-                color: #c9d1d9;
-                border: none;
-                border-radius: 3px;
-                padding: 3px 8px;
-                font-size: 11px;
-            }
-            QToolButton:hover {
-                background: #21262d;
-            }
-        """)
+        self._toolbar = tb
         self.addToolBar(tb)
 
         name = os.path.basename(filepath)
         lbl = QLabel(f"  {name}  ")
-        lbl.setStyleSheet("color: #f0f6fc; font-weight: 600; font-size: 12px;")
+        self._title_label = lbl
+        # set in _update_styles
         tb.addWidget(lbl)
 
         tb.addSeparator()
@@ -96,14 +97,6 @@ class NoteWindow(QMainWindow):
             self._browser = QTextBrowser()
             self._browser.setReadOnly(True)
             self._browser.setOpenExternalLinks(True)
-            self._browser.setStyleSheet("""
-                QTextBrowser {
-                    background-color: #0d1117;
-                    color: #c9d1d9;
-                    border: none;
-                    padding: 20px;
-                }
-            """)
             layout.addWidget(self._browser)
         else:
             self._text = QTextEdit()
@@ -111,14 +104,6 @@ class NoteWindow(QMainWindow):
             mono = QFont("Consolas", 12)
             mono.setStyleHint(QFont.StyleHint.Monospace)
             self._text.setFont(mono)
-            self._text.setStyleSheet("""
-                QTextEdit {
-                    background-color: #0d1117;
-                    color: #c9d1d9;
-                    border: none;
-                    padding: 16px;
-                }
-            """)
             layout.addWidget(self._text)
 
     def _load_file(self, filepath: str):
@@ -126,7 +111,7 @@ class NoteWindow(QMainWindow):
             return
         from zametka_dbs.utils.file_size import is_file_too_large, format_size
         if is_file_too_large(filepath):
-            from PyQt6.QtWidgets import QMessageBox
+            from PyQt6.QtWidgets import QPushButton,  QMessageBox
             reply = QMessageBox.question(
                 self, "Large file",
                 f"File is {format_size(filepath)}. Open anyway?",

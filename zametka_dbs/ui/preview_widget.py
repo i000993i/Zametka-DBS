@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, QSize
 from assets.icons import icon
 from zametka_dbs.preview.renderer import render_markdown
 from zametka_dbs.core.config import get_config
+from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.ui.pdf_viewer import PdfViewer
 
 
@@ -84,6 +85,8 @@ class PreviewWidget(QWidget):
         self._source = ""
         self._pending = False
         self._note_map: dict | None = None
+        self._dark = True
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
 
     def set_note_map(self, note_map: dict | None):
         self._note_map = note_map
@@ -127,8 +130,13 @@ class PreviewWidget(QWidget):
         except Exception:
             self._browser.clear()
 
+    def _on_theme_changed(self, theme: str, **kwargs):
+        self._dark = theme == "dark"
+        if self._source:
+            self._do_render()
+
     def _do_render(self):
-        html = render_markdown(self._source, note_map=self._note_map)
+        html = render_markdown(self._source, note_map=self._note_map, dark=self._dark)
         self._browser.setHtml(html)
         self.rendered.emit(html)
 
@@ -151,57 +159,4 @@ class PreviewWidget(QWidget):
         self._image_label.clear()
         self.update_content("")
 
-    def _styles(self) -> str:
-        return """
-            QWidget#preview-widget {
-                background-color: #0a0a0a;
-                border-left: 1px solid #1a1a1a;
-            }
-            QWidget#preview-header {
-                background-color: #0a0a0a;
-                border-bottom: 1px solid #1a1a1a;
-            }
-            QLabel#preview-header-label {
-                color: #808080;
-                font-size: 11px;
-                font-weight: 600;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-            }
-            QTextBrowser#preview-browser {
-                background-color: #0a0a0a;
-                color: #eeeeee;
-                border: none;
-                padding: 0;
-            }
-            QScrollArea#preview-image-scroll {
-                background-color: #0a0a0a;
-                border: none;
-            }
-            QLabel#preview-image-label {
-                background-color: #0a0a0a;
-                color: #808080;
-                font-size: 13px;
-            }
-            QTextBrowser#preview-browser QScrollBar:vertical {
-                background-color: #0a0a0a;
-                width: 6px;
-                margin: 0;
-            }
-            QTextBrowser#preview-browser QScrollBar::handle:vertical {
-                background-color: #1a1a1a;
-                min-height: 30px;
-                border-radius: 3px;
-            }
-            QTextBrowser#preview-browser QScrollBar::handle:vertical:hover {
-                background-color: #2a2a2a;
-            }
-            QTextBrowser#preview-browser QScrollBar::add-line:vertical,
-            QTextBrowser#preview-browser QScrollBar::sub-line:vertical {
-                height: 0;
-            }
-            QTextBrowser#preview-browser QScrollBar::add-page:vertical,
-            QTextBrowser#preview-browser QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """
+

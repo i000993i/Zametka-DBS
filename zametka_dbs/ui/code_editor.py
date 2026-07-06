@@ -9,6 +9,7 @@ from zametka_dbs.ui.syntax_highlighter import MarkdownHighlighter
 from zametka_dbs.ui.language_highlighters import get_highlighter_for_file
 from zametka_dbs.core.config import get_config
 from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
 
 
 class CodeEditor(QPlainTextEdit):
@@ -74,7 +75,7 @@ class CodeEditor(QPlainTextEdit):
             return
         selections = [s for s in self.extraSelections() if s.format.property(256) is None]
         sel = QTextEdit.ExtraSelection()
-        c = QColor("#fab283")
+        c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
         c.setAlpha(8)
         sel.format.setBackground(c)
         sel.format.setProperty(256, True)

@@ -2,6 +2,10 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
+from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
+from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
 from PyQt6.QtGui import QKeySequence
 
 
@@ -38,6 +42,18 @@ class CommandPalette(QWidget):
         self._commands = []
         self._all_items = []
 
+        self._dark = True
+        self.setStyleSheet(self._styles())
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
+
+    def _on_theme_changed(self, theme: str, **kwargs):
+        self._dark = theme == 'dark'
+        self._dark = True
+        self.setStyleSheet(self._styles())
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
+
+    def _on_theme_changed(self, theme: str, **kwargs):
+        self._dark = theme == 'dark'
         self.setStyleSheet(self._styles())
 
     def set_commands(self, commands: list[tuple[str, str]]):
@@ -88,17 +104,18 @@ class CommandPalette(QWidget):
         self.close()
 
     def _styles(self):
-        return """
+        v = _THEME_VARS["dark" if self._dark else "light"]
+        return f"""
             QWidget#command-palette {
-                background-color: #1a1a1a;
-                border: 1px solid #2a2a2a;
+                background-color: {v["bg2"]};
+                border: 1px solid {v["border2"]};
                 border-radius: 6px;
             }
             QLineEdit#palette-search {
-                background-color: #0a0a0a;
-                color: #eeeeee;
+                background-color: {v["bg0"]};
+                color: {v["fg0"]};
                 border: none;
-                border-bottom: 1px solid #2a2a2a;
+                border-bottom: 1px solid {v["border2"]};
                 border-radius: 0;
                 padding: 8px 14px;
                 font-size: 14px;
@@ -106,7 +123,7 @@ class CommandPalette(QWidget):
             QListWidget#palette-list {
                 background-color: transparent;
                 border: none;
-                color: #b0b0b0;
+                color: {v["fg1"]};
                 font-size: 13px;
                 outline: none;
                 padding: 4px;
@@ -117,7 +134,7 @@ class CommandPalette(QWidget):
             }
             QListWidget#palette-list::item:hover,
             QListWidget#palette-list::item:selected {
-                background-color: #2a2a2a;
-                color: #eeeeee;
+                background-color: {v["sel_bg"]};
+                color: {v["fg0"]};
             }
         """

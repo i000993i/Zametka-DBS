@@ -10,7 +10,7 @@ try:
 except ImportError:
     _HAS_RUST = False
 
-from zametka_dbs.preview.styles import PREVIEW_CSS, empty_preview, process_tags, process_callouts
+from zametka_dbs.preview.styles import _preview_css, empty_preview, process_tags, process_callouts
 
 
 _WIKILINK_HTML_RE = re.compile(
@@ -30,9 +30,10 @@ def _py_resolve_wikilinks(html: str, note_map: dict) -> str:
     return _WIKILINK_HTML_RE.sub(_replace, html)
 
 
-def render_markdown(text: str, note_map: dict | None = None) -> str:
+def render_markdown(text: str, note_map: dict | None = None, dark: bool = True) -> str:
+    css = _preview_css(dark)
     if not text:
-        return empty_preview()
+        return empty_preview(dark)
     if _HAS_RUST:
         html = _rust_render(text)
     else:
@@ -46,4 +47,4 @@ def render_markdown(text: str, note_map: dict | None = None) -> str:
             html = _rust_resolve_wikilinks(html, note_map)
         else:
             html = _py_resolve_wikilinks(html, note_map)
-    return PREVIEW_CSS + html
+    return css + html

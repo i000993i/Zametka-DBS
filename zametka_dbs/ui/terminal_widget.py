@@ -280,8 +280,8 @@ class _TerminalSession(QWidget):
         input_layout.setContentsMargins(8, 2, 8, 4)
         input_layout.setSpacing(4)
 
-        prompt = QLabel(">")
-        prompt.setStyleSheet("color: #3fb950; font-weight: 700; font-size: 13px;")
+        self._prompt = QLabel(">")
+        self._prompt.setStyleSheet("color: #3fb950; font-weight: 700; font-size: 13px;")
         input_layout.addWidget(prompt)
 
         self.input = _TerminalInput()
@@ -534,7 +534,7 @@ class _TerminalSession(QWidget):
         while i < len(codes):
             c = codes[i]
             if c == 0:
-                fmt.setForeground(QColor("#c9d1d9"))
+                fmt.setForeground(QColor(self._fg0))
                 fmt.setBackground(QColor())
                 fmt.setFontWeight(QFont.Weight.Normal)
             elif c == 1:
@@ -544,13 +544,13 @@ class _TerminalSession(QWidget):
             elif 30 <= c <= 37:
                 fmt.setForeground(QColor(_ANSI_COLORS[c - 30]))
             elif c == 39:
-                fmt.setForeground(QColor("#c9d1d9"))
+                fmt.setForeground(QColor(self._fg0))
             elif 40 <= c <= 47:
                 fmt.setBackground(QColor(_ANSI_COLORS[c - 40]))
             elif c == 49:
                 fmt.setBackground(QColor())
             elif c == 100:
-                fmt.setBackground(QColor("#808080"))
+                fmt.setBackground(QColor(self._fg2))
             elif 101 <= c <= 107:
                 fmt.setBackground(QColor(_ANSI_BRIGHT[c - 101]))
             elif c == 90:
@@ -769,10 +769,11 @@ class TerminalWidget(QWidget):
             session.focus_input()
 
     def _styles(self) -> str:
-        return """
+        v = _THEME_VARS["dark" if self._dark else "light"]
+        return f"""
             QWidget#terminal-tab-row {
-                background-color: #0a0a0a;
-                border-bottom: 1px solid #1a1a1a;
+                background-color: {v["bg0"]};
+                border-bottom: 1px solid {v["border"]};
             }
             QTabBar#terminal-tab-bar {
                 background: transparent;
@@ -780,22 +781,22 @@ class TerminalWidget(QWidget):
                 qproperty-drawBase: 0;
             }
             QTabBar#terminal-tab-bar::tab {
-                background: #0a0a0a;
-                color: #808080;
+                background: {v["bg0"]};
+                color: {v["fg2"]};
                 padding: 4px 14px;
                 font-size: 11px;
                 font-weight: 600;
                 border: none;
-                border-right: 1px solid #1a1a1a;
+                border-right: 1px solid {v["border"]};
                 min-height: 26px;
             }
             QTabBar#terminal-tab-bar::tab:selected {
-                color: #c9d1d9;
-                background: #1a1a1a;
+                color: {v["fg0"]};
+                background: {v["bg2"]};
             }
             QTabBar#terminal-tab-bar::tab:hover:!selected {
-                color: #c9d1d9;
-                background: #111;
+                color: {v["fg0"]};
+                background: {v["bg4"]};
             }
             QTabBar#terminal-tab-bar::close-button {
                 width: 14px;
@@ -803,31 +804,31 @@ class TerminalWidget(QWidget):
                 margin: 0 0 0 6px;
             }
             QTabBar#terminal-tab-bar::close-button:hover {
-                background: #21262d;
+                background: {v["bg3"]};
                 border-radius: 2px;
             }
             QPushButton#terminal-add-btn {
                 background: transparent;
                 border: none;
-                color: #808080;
+                color: {v["fg2"]};
                 font-size: 16px;
                 font-weight: 700;
                 margin: 0 2px;
                 border-radius: 2px;
             }
             QPushButton#terminal-add-btn:hover {
-                background: #21262d;
-                color: #c9d1d9;
+                background: {v["bg3"]};
+                color: {v["fg0"]};
             }
             QPushButton#terminal-clear-btn, QPushButton#terminal-close-btn {
                 background: transparent;
                 border: none;
                 border-radius: 2px;
-                color: #808080;
+                color: {v["fg2"]};
                 margin: 0 1px;
             }
             QPushButton#terminal-clear-btn:hover, QPushButton#terminal-close-btn:hover {
-                background: #21262d;
-                color: #c9d1d9;
+                background: {v["bg3"]};
+                color: {v["fg0"]};
             }
         """

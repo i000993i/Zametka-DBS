@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QRect, QSize, QPoint, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal, QPoint
+from zametka_dbs.ui.styles import _THEME_VARS
 from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPen
 
 from zametka_dbs.core.config import get_config
@@ -110,18 +111,18 @@ class LineGutter(QWidget):
                 draw_y = max(visible_top, top)
 
                 if active:
-                    hl = QColor("#fab283")
+                    hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                     hl.setAlpha(10)
                     painter.fillRect(QRect(0, draw_y, self.width() - 1, bot - top), hl)
 
                 if active:
-                    c = QColor("#fab283")
+                    c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                 elif typ == "heading":
-                    c = QColor("#9d7cd8")
+                    c = QColor("#9d7cd8" if self._dark else "#8250df")
                 elif typ == "code":
-                    c = QColor("#7fd88f")
+                    c = QColor("#7fd88f" if self._dark else "#1a7f37")
                 elif typ == "list":
-                    c = QColor("#56b6c2")
+                    c = QColor("#56b6c2" if self._dark else "#0891b1")
                 elif typ == "blank":
                     c = QColor("transparent")
                 else:

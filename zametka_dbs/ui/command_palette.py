@@ -106,12 +106,12 @@ class CommandPalette(QWidget):
     def _styles(self):
         v = _THEME_VARS["dark" if self._dark else "light"]
         return f"""
-            QWidget#command-palette {
+            QWidget#command-palette {{
                 background-color: {v["bg2"]};
                 border: 1px solid {v["border2"]};
                 border-radius: 6px;
-            }
-            QLineEdit#palette-search {
+            }}
+            QLineEdit#palette-search {{
                 background-color: {v["bg0"]};
                 color: {v["fg0"]};
                 border: none;
@@ -119,22 +119,22 @@ class CommandPalette(QWidget):
                 border-radius: 0;
                 padding: 8px 14px;
                 font-size: 14px;
-            }
-            QListWidget#palette-list {
+            }}
+            QListWidget#palette-list {{
                 background-color: transparent;
                 border: none;
                 color: {v["fg1"]};
                 font-size: 13px;
                 outline: none;
                 padding: 4px;
-            }
-            QListWidget#palette-list::item {
+            }}
+            QListWidget#palette-list::item {{
                 padding: 6px 14px;
                 border-radius: 3px;
-            }
+            }}
             QListWidget#palette-list::item:hover,
-            QListWidget#palette-list::item:selected {
+            QListWidget#palette-list::item:selected {{
                 background-color: {v["sel_bg"]};
                 color: {v["fg0"]};
-            }
+            }}
         """

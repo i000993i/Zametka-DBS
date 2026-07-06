@@ -703,10 +703,45 @@ class TerminalWidget(QWidget):
         self._stack.setObjectName("terminal-stack")
         layout.addWidget(self._stack, 1)
 
+        self._dark = True
+        self._fg0 = _THEME_VARS['dark']['fg0']
+        self._fg2 = _THEME_VARS['dark']['fg2']
         self.setStyleSheet(self._styles())
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
 
         # Start with one session
         self._add_session()
+
+    def _on_theme_changed(self, theme: str, **kwargs):
+        self._dark = theme == 'dark'
+        v = _THEME_VARS['dark' if self._dark else 'light']
+        self._fg0 = v['fg0']
+        self._fg2 = v['fg2']
+        self._update_styles()
+
+    def _update_styles(self):
+        self.setStyleSheet(self._styles())
+        v = _THEME_VARS['dark' if self._dark else 'light']
+        self.output.setStyleSheet(f'''
+            QTextEdit#terminal-output {{
+                background-color: {v['bg0']};
+                color: {v['fg0']};
+                border: none;
+                padding: 4px 8px;
+                font-size: 13px;
+            }}
+        ''')
+        pc = '#3fb950' if self._dark else '#1a7f37'
+        self._prompt.setStyleSheet(f'color: {pc}; font-weight: 700; font-size: 13px;')
+        self.input.setStyleSheet(f'''
+            QLineEdit#terminal-input {{
+                background: transparent;
+                border: none;
+                color: {v['fg0']};
+                font-size: 13px;
+                padding: 2px 0;
+            }}
+        ''')
 
     def _add_session(self, shell: str | None = None, cwd: str | None = None):
         if shell is None:
@@ -771,16 +806,16 @@ class TerminalWidget(QWidget):
     def _styles(self) -> str:
         v = _THEME_VARS["dark" if self._dark else "light"]
         return f"""
-            QWidget#terminal-tab-row {
+            QWidget#terminal-tab-row {{
                 background-color: {v["bg0"]};
                 border-bottom: 1px solid {v["border"]};
-            }
-            QTabBar#terminal-tab-bar {
+            }}
+            QTabBar#terminal-tab-bar {{
                 background: transparent;
                 border: none;
                 qproperty-drawBase: 0;
-            }
-            QTabBar#terminal-tab-bar::tab {
+            }}
+            QTabBar#terminal-tab-bar::tab {{
                 background: {v["bg0"]};
                 color: {v["fg2"]};
                 padding: 4px 14px;
@@ -789,25 +824,25 @@ class TerminalWidget(QWidget):
                 border: none;
                 border-right: 1px solid {v["border"]};
                 min-height: 26px;
-            }
-            QTabBar#terminal-tab-bar::tab:selected {
+            }}
+            QTabBar#terminal-tab-bar::tab:selected {{
                 color: {v["fg0"]};
                 background: {v["bg2"]};
-            }
-            QTabBar#terminal-tab-bar::tab:hover:!selected {
+            }}
+            QTabBar#terminal-tab-bar::tab:hover:!selected {{
                 color: {v["fg0"]};
                 background: {v["bg4"]};
-            }
-            QTabBar#terminal-tab-bar::close-button {
+            }}
+            QTabBar#terminal-tab-bar::close-button {{
                 width: 14px;
                 height: 14px;
                 margin: 0 0 0 6px;
-            }
-            QTabBar#terminal-tab-bar::close-button:hover {
+            }}
+            QTabBar#terminal-tab-bar::close-button:hover {{
                 background: {v["bg3"]};
                 border-radius: 2px;
-            }
-            QPushButton#terminal-add-btn {
+            }}
+            QPushButton#terminal-add-btn {{
                 background: transparent;
                 border: none;
                 color: {v["fg2"]};
@@ -815,20 +850,20 @@ class TerminalWidget(QWidget):
                 font-weight: 700;
                 margin: 0 2px;
                 border-radius: 2px;
-            }
-            QPushButton#terminal-add-btn:hover {
+            }}
+            QPushButton#terminal-add-btn:hover {{
                 background: {v["bg3"]};
                 color: {v["fg0"]};
-            }
-            QPushButton#terminal-clear-btn, QPushButton#terminal-close-btn {
+            }}
+            QPushButton#terminal-clear-btn, QPushButton#terminal-close-btn {{
                 background: transparent;
                 border: none;
                 border-radius: 2px;
                 color: {v["fg2"]};
                 margin: 0 1px;
-            }
-            QPushButton#terminal-clear-btn:hover, QPushButton#terminal-close-btn:hover {
+            }}
+            QPushButton#terminal-clear-btn:hover, QPushButton#terminal-close-btn:hover {{
                 background: {v["bg3"]};
                 color: {v["fg0"]};
-            }
+            }}
         """

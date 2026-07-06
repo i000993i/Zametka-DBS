@@ -1,8 +1,11 @@
 import json
 import logging
 import os
+import shutil
 
 logger = logging.getLogger(__name__)
+
+CONFIG_VERSION = 1
 
 try:
     from zametka_core import Config as RustConfig
@@ -27,6 +30,27 @@ class _PyConfig:
             except Exception as e:
                 logger.warning(f"Failed to load config: {e}")
                 self._data = {}
+        self._migrate()
+
+    def _migrate(self):
+        current = self._data.get("_config_version", 0)
+        if current >= CONFIG_VERSION:
+            return
+        self._data["_config_version"] = CONFIG_VERSION
+        if current < 1:
+            self._migrate_v1()
+        self._save()
+
+    def _migrate_v1(self):
+        old_path = os.path.join(os.environ.get("APPDATA", ""), "Zametka", "config.json")
+        new_path = os.path.join(os.environ.get("APPDATA", ""), "Zametka")
+        signal_path = os.path.join(new_path, "config.json")
+        if old_path != signal_path and os.path.isfile(old_path):
+            try:
+                shutil.copy2(old_path, signal_path)
+                logger.info("Config migrated from legacy location")
+            except Exception as e:
+                logger.warning(f"Config migration failed: {e}")
 
     def _save(self):
         os.makedirs(os.path.dirname(self._path), exist_ok=True)

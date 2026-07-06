@@ -41,10 +41,13 @@ class _PySearchIndex:
         self._indexed_files.clear()
 
     def index_vault(self, vault_path):
+        from zametka_dbs.utils.file_size import is_file_too_large
         count = 0
         for root, _dirs, files in os.walk(vault_path):
             for fname in files:
                 path = os.path.join(root, fname)
+                if is_file_too_large(path):
+                    continue
                 try:
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
                         content = f.read()

@@ -33,8 +33,11 @@ def _py_find_markdown_files(vault_path):
 
 
 def _py_build_backlinks(note_map):
+    from zametka_dbs.utils.file_size import is_file_too_large
     back = defaultdict(list)
     for name, path in note_map.items():
+        if is_file_too_large(path):
+            continue
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()

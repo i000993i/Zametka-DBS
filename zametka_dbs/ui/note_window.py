@@ -124,6 +124,16 @@ class NoteWindow(QMainWindow):
     def _load_file(self, filepath: str):
         if not os.path.isfile(filepath):
             return
+        from zametka_dbs.utils.file_size import is_file_too_large, format_size
+        if is_file_too_large(filepath):
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self, "Large file",
+                f"File is {format_size(filepath)}. Open anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
         try:
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()

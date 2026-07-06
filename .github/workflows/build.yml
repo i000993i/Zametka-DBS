@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install -r requirements.txt
+
+      - name: Test Python fallbacks (no Rust)
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from zametka_dbs.core.config import get_config; c = get_config(); assert c.get('theme') is None
+          from zametka_dbs.search.engine import SearchEngine; s = SearchEngine(); assert s is not None
+          from zametka_dbs.markdown.wikilinks import parse_wikilinks; assert parse_wikilinks('[[test]]') == ['test']
+          from zametka_dbs.ui.pinned_widget import _detect_language; assert _detect_language('f.py') == ('Python', '#9d7cd8')
+          print('All fallback tests passed')
+          "
+
+  build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller Zametka.spec --clean --noconfirm
+
+      - name: Create release zip
+        run: |
+          Compress-Archive -Path dist/Zametka/* -DestinationPath Zametka-Latest.zip -Force
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: Zametka-Latest.zip
+          generate_release_notes: true

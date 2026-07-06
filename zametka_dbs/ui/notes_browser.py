@@ -227,12 +227,7 @@ class NotesBrowser(QWidget):
         self._add_file_btn.clicked.connect(self._add_file_dialog)
         header_layout.addWidget(self._add_file_btn)
 
-        self._add_folder_btn = QPushButton(icon("folder"), " Folder")
-        self._add_folder_btn.setObjectName("notes-add-btn")
-        self._add_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._add_folder_btn.setToolTip("Add folder to Notes")
-        self._add_folder_btn.clicked.connect(self._add_folder_dialog)
-        header_layout.addWidget(self._add_folder_btn)
+
 
         layout.addWidget(header)
 
@@ -261,15 +256,6 @@ class NotesBrowser(QWidget):
             add_note(path)
             self._rebuild()
 
-    def _add_folder_dialog(self):
-        folder = QFileDialog.getExistingDirectory(
-            self, "Add folder", "",
-            QFileDialog.Option.ShowDirsOnly
-        )
-        if folder:
-            add_note(folder)
-            self._rebuild()
-
     def _rebuild(self):
         while self._card_layout.count() > 1:
             item = self._card_layout.takeAt(0)
@@ -277,7 +263,7 @@ class NotesBrowser(QWidget):
                 item.widget().deleteLater()
         notes = get_notes_list()
         if not notes:
-            empty = QLabel("No notes yet.\nClick + to add files or folders.")
+            empty = QLabel("No notes yet.\nClick + to add files.")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet("color: #484f58; font-size: 11px; padding: 20px; background: transparent;")
             self._card_layout.insertWidget(0, empty)

@@ -365,6 +365,7 @@ def the_stylesheet(theme: str = "dark") -> str:
         }}
         QLabel#pinned-name {{
             font-size: 12px;
+            color: {v["fg0"]};
         }}
         QListWidget#pinned-list {{
             background-color: {v["bg0"]};

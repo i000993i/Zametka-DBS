@@ -492,60 +492,60 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
 
         file_menu = mb.addMenu("Файл")
-        act_open_file = QAction("Open File...", self)
+        act_open_file = QAction("Открыть файл...", self)
         act_open_file.triggered.connect(self._open_file_dialog)
         file_menu.addAction(act_open_file)
-        act_open_folder = QAction("Open Folder...", self)
+        act_open_folder = QAction("Открыть папку...", self)
         act_open_folder.triggered.connect(self._open_vault_dialog)
         file_menu.addAction(act_open_folder)
-        act_close_folder = QAction("Close Folder", self)
+        act_close_folder = QAction("Закрыть папку", self)
         act_close_folder.triggered.connect(self._close_current_vault)
         file_menu.addAction(act_close_folder)
         file_menu.addSeparator()
-        act_save = QAction("Save", self)
+        act_save = QAction("Сохранить", self)
         act_save.triggered.connect(self._save_current_file)
         file_menu.addAction(act_save)
-        act_save_as = QAction("Save As...", self)
+        act_save_as = QAction("Сохранить как...", self)
         act_save_as.triggered.connect(self._save_as)
         file_menu.addAction(act_save_as)
         file_menu.addSeparator()
-        act_quit = QAction("Quit", self)
+        act_quit = QAction("Выход", self)
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
         view_menu = mb.addMenu("Вид")
-        act_preview = QAction("Toggle Preview", self)
+        act_preview = QAction("Показать/скрыть предпросмотр", self)
         act_preview.triggered.connect(self._toggle_preview)
         view_menu.addAction(act_preview)
-        act_terminal = QAction("Toggle Terminal", self)
+        act_terminal = QAction("Показать/скрыть терминал", self)
         act_terminal.triggered.connect(self._toggle_terminal)
         view_menu.addAction(act_terminal)
-        act_search = QAction("Toggle Search", self)
+        act_search = QAction("Показать/скрыть поиск", self)
         act_search.triggered.connect(self._toggle_search)
         view_menu.addAction(act_search)
-        act_file_search = QAction("Toggle File Search", self)
+        act_file_search = QAction("Показать/скрыть поиск файлов", self)
         act_file_search.triggered.connect(self._toggle_file_search)
         view_menu.addAction(act_file_search)
-        act_palette = QAction("Command Palette", self)
+        act_palette = QAction("Палитра команд", self)
         act_palette.triggered.connect(self._toggle_command_palette)
         view_menu.addAction(act_palette)
-        act_split = QAction("Split Editor", self)
+        act_split = QAction("Разделить редактор", self)
         act_split.triggered.connect(self._toggle_split)
         view_menu.addAction(act_split)
         view_menu.addSeparator()
         config = get_config()
         current_theme = config.get("theme", "dark")
-        act_theme = QAction("Light Theme" if current_theme == "dark" else "Dark Theme", self)
+        act_theme = QAction("Светлая тема" if current_theme == "dark" else "Тёмная тема", self)
         act_theme.triggered.connect(self._toggle_theme)
         view_menu.addAction(act_theme)
 
         ref_menu = mb.addMenu("Справочник")
-        act_handbook = QAction("Markdown Handbook", self)
+        act_handbook = QAction("Справочник по Markdown", self)
         act_handbook.triggered.connect(self._open_handbook)
         ref_menu.addAction(act_handbook)
 
         about_menu = mb.addMenu("О приложении")
-        act_about = QAction("About Zametka", self)
+        act_about = QAction("О Zametka", self)
         act_about.triggered.connect(self._show_about)
         about_menu.addAction(act_about)
         about_menu.addSeparator()
@@ -556,7 +556,7 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         from PyQt6.QtWidgets import QMessageBox
         from zametka_dbs.core.version import __version__, __repo__
-        QMessageBox.about(self, "About Zametka",
+        QMessageBox.about(self, "О Zametka",
             "Zametka — заметки с Rust-ядром\n\n"
             f"Версия: {__version__}\n"
             f"GitHub: {__repo__}\n"
@@ -1130,31 +1130,31 @@ class MainWindow(QMainWindow):
     def _show_vault_menu(self):
         menu = QMenu(self)
 
-        act_open_file = QAction("Open File", self)
+        act_open_file = QAction("Открыть файл", self)
         act_open_file.triggered.connect(self._open_file_dialog)
         menu.addAction(act_open_file)
 
-        act_create_file = QAction("Create File", self)
+        act_create_file = QAction("Создать файл", self)
         act_create_file.triggered.connect(self._new_note)
         menu.addAction(act_create_file)
 
         menu.addSeparator()
 
-        act_open_folder = QAction("Open Folder", self)
+        act_open_folder = QAction("Открыть папку", self)
         act_open_folder.triggered.connect(self._open_vault_dialog)
         menu.addAction(act_open_folder)
 
-        act_close_folder = QAction("Close Folder", self)
+        act_close_folder = QAction("Закрыть папку", self)
         act_close_folder.triggered.connect(self._close_current_vault)
         menu.addAction(act_close_folder)
 
         menu.addSeparator()
 
-        act_save = QAction("Save", self)
+        act_save = QAction("Сохранить", self)
         act_save.triggered.connect(self._save_current_file)
         menu.addAction(act_save)
 
-        act_save_as = QAction("Save As...", self)
+        act_save_as = QAction("Сохранить как...", self)
         act_save_as.triggered.connect(self._save_as)
         menu.addAction(act_save_as)
 
@@ -1163,7 +1163,7 @@ class MainWindow(QMainWindow):
         config = get_config()
         current_theme = config.get("theme", "dark")
         act_toggle_theme = QAction(
-            "Light Theme" if current_theme == "dark" else "Dark Theme", self
+            "Светлая тема" if current_theme == "dark" else "Тёмная тема", self
         )
         act_toggle_theme.triggered.connect(self._toggle_theme)
         menu.addAction(act_toggle_theme)

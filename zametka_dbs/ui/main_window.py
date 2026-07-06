@@ -570,13 +570,19 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _auto_check_updates(self):
-        from zametka_dbs.core.updater import check_for_updates
-        try:
-            result = check_for_updates()
-            if result.available:
-                self.status_info.setText(f"Доступно обновление {result.latest_version}")
-        except Exception:
-            pass
+        import threading
+        def _check():
+            try:
+                from zametka_dbs.core.updater import check_for_updates
+                result = check_for_updates()
+                if result.available:
+                    def update_ui():
+                        self.status_info.setText(f"Доступно обновление {result.latest_version}")
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(0, update_ui)
+            except Exception:
+                pass
+        threading.Thread(target=_check, daemon=True).start()
 
     def _setup_shortcuts(self):
         sc_save = QShortcut(QKeySequence.StandardKey.Save, self)

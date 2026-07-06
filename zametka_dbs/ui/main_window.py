@@ -1416,6 +1416,12 @@ class MainWindow(QMainWindow):
         is_dark = theme == "dark"
         self.editor.update_theme(is_dark)
         self.editor2.update_theme(is_dark)
+        ico_color = "#cccccc" if is_dark else "#555555"
+        self._split_btn.setIcon(icon("columns", ico_color))
+        self._preview_toggle_btn.setIcon(icon("layout", ico_color))
+        self._html_toggle_btn.setIcon(icon("eye", ico_color))
+        self._save_btn.setIcon(icon("save", ico_color))
+        self._save_as_btn.setIcon(icon("save", ico_color))
         self.bus.emit(Events.THEME_CHANGED, theme=theme)
 
     def _load_stylesheet(self, theme: str = "dark") -> str:

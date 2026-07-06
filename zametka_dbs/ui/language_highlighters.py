@@ -63,16 +63,9 @@ LIGHT_STYLES = {
     "params":    _fmt("#633b9a"),
 }
 
-def _get_style(name: str, dark: bool = True):
-    return DARK_STYLES if dark else LIGHT_STYLES
-
-STYLES = DARK_STYLES
-
-
 class LanguageHighlighter(QSyntaxHighlighter):
     def __init__(self, parent, lang_def):
         super().__init__(parent)
-        self._dark = True
         self._dark = True
         self._lang = lang_def
         self._rules = self._compile_rules()
@@ -126,12 +119,12 @@ class LanguageHighlighter(QSyntaxHighlighter):
         if state == IN_BLOCK_COMMENT and self._block_comment:
             end_idx = text.find(self._block_comment[1])
             if end_idx >= 0:
-                self.setFormat(0, end_idx + len(self._block_comment[1]), get_styles(self._dark)["comment"])
+                self.setFormat(0, end_idx + len(self._block_comment[1]), self._styles()["comment"])
                 self.setCurrentBlockState(NORMAL)
                 remaining = text[end_idx + len(self._block_comment[1]):]
                 self._apply_rules(remaining, end_idx + len(self._block_comment[1]))
             else:
-                self.setFormat(0, len(text), get_styles(self._dark)["comment"])
+                self.setFormat(0, len(text), self._styles()["comment"])
                 self.setCurrentBlockState(IN_BLOCK_COMMENT)
             return
 
@@ -139,12 +132,12 @@ class LanguageHighlighter(QSyntaxHighlighter):
             for delim in self._triple_strings:
                 idx = text.find(delim)
                 if idx >= 0:
-                    self.setFormat(0, idx + len(delim), get_styles(self._dark)["string"])
+                    self.setFormat(0, idx + len(delim), self._styles()["string"])
                     self.setCurrentBlockState(NORMAL)
                     remaining = text[idx + len(delim):]
                     self._apply_rules(remaining, idx + len(delim))
                     return
-            self.setFormat(0, len(text), get_styles(self._dark)["string"])
+            self.setFormat(0, len(text), self._styles()["string"])
             self.setCurrentBlockState(IN_TRIPLE_STRING)
             return
 
@@ -154,7 +147,7 @@ class LanguageHighlighter(QSyntaxHighlighter):
         if self._single_comment:
             idx = text.find(self._single_comment)
             if idx >= 0 and not self._in_string(text, idx):
-                self.setFormat(idx, len(text) - idx, get_styles(self._dark)["comment"])
+                self.setFormat(idx, len(text) - idx, self._styles()["comment"])
                 text = text[:idx]
 
         # ── Block comment start ──
@@ -164,7 +157,7 @@ class LanguageHighlighter(QSyntaxHighlighter):
             if start_idx >= 0:
                 end_idx = text.find(bce, start_idx + len(bcs))
                 if end_idx >= 0:
-                    self.setFormat(start_idx, end_idx + len(bce) - start_idx, get_styles(self._dark)["comment"])
+                    self.setFormat(start_idx, end_idx + len(bce) - start_idx, self._styles()["comment"])
                     before = text[:start_idx]
                     after = text[end_idx + len(bce):]
                     for delim in self._lang.get("strings", []):
@@ -173,7 +166,7 @@ class LanguageHighlighter(QSyntaxHighlighter):
                     self._apply_rules(before, 0)
                     self._apply_rules(after, end_idx + len(bce))
                 else:
-                    self.setFormat(start_idx, len(text) - start_idx, get_styles(self._dark)["comment"])
+                    self.setFormat(start_idx, len(text) - start_idx, self._styles()["comment"])
                     self.setCurrentBlockState(IN_BLOCK_COMMENT)
                 return
 
@@ -187,11 +180,11 @@ class LanguageHighlighter(QSyntaxHighlighter):
             if idx >= 0:
                 end_idx = text.find(delim, idx + len(delim))
                 if end_idx >= 0:
-                    self.setFormat(idx, end_idx + len(delim) - idx, get_styles(self._dark)["string"])
+                    self.setFormat(idx, end_idx + len(delim) - idx, self._styles()["string"])
                     self._apply_rules(text[:idx], 0)
                     self._apply_rules(text[end_idx + len(delim):], end_idx + len(delim))
                 else:
-                    self.setFormat(idx, len(text) - idx, get_styles(self._dark)["string"])
+                    self.setFormat(idx, len(text) - idx, self._styles()["string"])
                     self.setCurrentBlockState(IN_TRIPLE_STRING)
                 return
 
@@ -201,7 +194,7 @@ class LanguageHighlighter(QSyntaxHighlighter):
     def _highlight_strings(self, text, delim):
         pattern = re.compile(rf'(?<!\\){re.escape(delim)}[^{delim}\n]*(?<!\\){re.escape(delim)}')
         for m in pattern.finditer(text):
-            self.setFormat(m.start(), m.end() - m.start(), get_styles(self._dark)["string"])
+            self.setFormat(m.start(), m.end() - m.start(), self._styles()["string"])
 
     def _in_string(self, text, pos):
         for delim in self._lang.get("strings", []):
@@ -219,9 +212,9 @@ class LanguageHighlighter(QSyntaxHighlighter):
                 start = offset + m.start()
                 end = offset + m.end()
                 # Don't overwrite already formatted regions (comments/strings)
-                if self.format(start) == get_styles(self._dark)["comment"] or self.format(start) == get_styles(self._dark)["string"]:
+                if self.format(start) == self._styles()["comment"] or self.format(start) == self._styles()["string"]:
                     continue
-                self.setFormat(start, end - start, get_styles(self._dark)[style_key])
+                self.setFormat(start, end - start, self._styles()[style_key])
 
 
 # ── Language definitions ──

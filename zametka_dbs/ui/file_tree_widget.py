@@ -6,6 +6,7 @@ from PyQt6.QtGui import QFileSystemModel, QStandardItemModel, QAction, QPen, QCo
 from PyQt6.QtCore import Qt, QDir, QModelIndex, pyqtSignal, QSortFilterProxyModel, QPoint, QPointF, QSize
 
 from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
 from assets.icons import icon
 
 _HIDDEN_PATTERNS = {
@@ -88,7 +89,8 @@ class _TreeBranchStyle(QProxyStyle):
             has_children = bool(option.state & QStyle.StateFlag.State_Children)
 
             painter.save()
-            v = _THEME_VARS["dark" if self._dark else "light"]
+            dark = getattr(widget, '_dark', True) if widget else True
+            v = _THEME_VARS["dark" if dark else "light"]
             painter.setPen(QPen(QColor(v["border2"]), 1))
             painter.setBrush(Qt.BrushStyle.NoBrush)
 
@@ -108,7 +110,7 @@ class _TreeBranchStyle(QProxyStyle):
                 else:
                     tri = [QPointF(cx - w, cy - h), QPointF(cx - w, cy + h), QPointF(cx + w, cy)]
                 painter.setPen(Qt.PenStyle.NoPen)
-                v = _THEME_VARS["dark" if self._dark else "light"]
+                v = _THEME_VARS["dark" if dark else "light"]
                 painter.setBrush(QColor(v["fg1"]))
                 painter.drawPolygon(*tri)
 

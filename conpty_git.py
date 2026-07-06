@@ -1,4 +1,4 @@
-import ctypes
+﻿import ctypes
 import ctypes.wintypes
 import logging
 import os
@@ -233,7 +233,7 @@ class ConPtyProcess:
         sa.bInheritHandle = True
         sa.lpSecurityDescriptor = None
 
-        # Create input pipe: app writes → ConPTY reads
+        # Create input pipe: app writes тЖТ ConPTY reads
         hConPtyInput = wintypes.HANDLE(INVALID_HANDLE_VALUE)
         hAppInputWrite = wintypes.HANDLE(INVALID_HANDLE_VALUE)
         ret = kernel32.CreatePipe(
@@ -246,7 +246,7 @@ class ConPtyProcess:
             raise OSError("CreatePipe failed for input pipe")
         self._hInputWrite = hAppInputWrite
 
-        # Create output pipe: ConPTY writes → app reads
+        # Create output pipe: ConPTY writes тЖТ app reads
         hAppOutputRead = wintypes.HANDLE(INVALID_HANDLE_VALUE)
         hConPtyOutput = wintypes.HANDLE(INVALID_HANDLE_VALUE)
         ret = kernel32.CreatePipe(
@@ -387,7 +387,7 @@ class ConPtyProcess:
         self._shutdown.set()
         self._running = False
 
-        # Close pseudo console first — breaks the output pipe and unblocks ReadFile
+        # Close pseudo console first тАФ breaks the output pipe and unblocks ReadFile
         if self._hPC and self._hPC.value and self._hPC.value != INVALID_HANDLE_VALUE:
             kernel32.ClosePseudoConsole(self._hPC)
             self._hPC = wintypes.HANDLE(INVALID_HANDLE_VALUE)

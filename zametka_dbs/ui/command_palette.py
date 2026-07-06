@@ -2,8 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from zametka_dbs.core.event_bus import get_bus, Events
-from zametka_dbs.ui.styles import _THEME_VARS
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.ui.styles import _THEME_VARS
 from PyQt6.QtGui import QKeySequence

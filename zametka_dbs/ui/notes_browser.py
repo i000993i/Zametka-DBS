@@ -10,6 +10,8 @@ from PyQt6.QtGui import QAction, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF
 
 from assets.icons import icon
+from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
 from zametka_dbs.core.badges import (
     BADGE_CATEGORIES, get_notes_list, add_note, remove_note,
     detect_file_badges, get_assigned_badges, add_assigned_badge,

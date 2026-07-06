@@ -19,6 +19,7 @@ from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.core.config import get_config
 from zametka_dbs.ui.code_editor import CodeEditor
 from zametka_dbs.ui.file_tree_widget import FileTreeWidget
+from zametka_dbs.ui.document_viewer import DocumentViewer
 from zametka_dbs.ui.preview_widget import PreviewWidget
 from zametka_dbs.ui.backlinks_panel import BacklinksPanel
 from zametka_dbs.ui.search_widget import SearchWidget
@@ -1020,8 +1021,8 @@ class MainWindow(QMainWindow):
         viewer_type = state.get("viewer_type")
         self.editor.blockSignals(True)
         if viewer_path and os.path.isfile(viewer_path):
-            if viewer_type == "pdf":
-                self.preview.show_pdf(viewer_path)
+            if viewer_type == "document":
+                self.preview.show_document(viewer_path)
             else:
                 self.preview.show_image(viewer_path)
             self.editor.setPlainText("")
@@ -1300,7 +1301,7 @@ class MainWindow(QMainWindow):
             self.preview.show_image(path)
             return
 
-        if ext == ".pdf":
+        if DocumentViewer.can_open(path):
             name = os.path.basename(path)
             self._save_current_tab_state()
             self._open_tabs.append(path)
@@ -1310,13 +1311,13 @@ class MainWindow(QMainWindow):
                 "scroll": 0,
                 "modified": False,
                 "viewer_path": path,
-                "viewer_type": "pdf",
+                "viewer_type": "document",
             }
             tidx = self._tab_bar.addTab(name)
             self._tab_bar.setTabData(tidx, path)
             self._tab_bar.setCurrentIndex(tidx)
             self._switch_to_tab(tidx)
-            self.preview.show_pdf(path)
+            self.preview.show_document(path)
             return
 
         from zametka_dbs.utils.file_size import is_file_too_large, format_size

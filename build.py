@@ -36,9 +36,13 @@ def run(cmd, cwd=None):
 def main():
     debug = "--debug" in sys.argv
 
-    step("1. Build Rust core (zametka_core)")
+    step("1. Build Rust core (zametka_core + zametka_conpty)")
     run(
         f'"{VENV_PYTHON}" -m maturin develop --release --manifest-path zametka-core\\Cargo.toml',
+        cwd=str(ROOT),
+    )
+    run(
+        f'"{VENV_PYTHON}" -m maturin develop --release --manifest-path zametka-conpty\\Cargo.toml',
         cwd=str(ROOT),
     )
 

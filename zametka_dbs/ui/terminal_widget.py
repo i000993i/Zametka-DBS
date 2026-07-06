@@ -17,7 +17,16 @@ from PyQt6.QtGui import (
 )
 
 from assets.icons import icon
-from .conpty import ConPtyProcess
+from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.ui.styles import _THEME_VARS
+
+from zametka_conpty import ConPtyProcess
+
+try:
+    from zametka_conpty import parse_ansi as _rust_parse_ansi
+    _HAS_RUST_ANSI = True
+except ImportError:
+    _HAS_RUST_ANSI = False
 
 logger = logging.getLogger(__name__)
 
@@ -230,15 +239,17 @@ class _TerminalOutput(QTextEdit):
 
 
 class _TerminalSession(QWidget):
-    output_received = pyqtSignal(object)
-
     def __init__(self, shell: str, cwd: str, parent=None):
         super().__init__(parent)
         self.shell = shell
         self.cwd = cwd
+        self._dark = True
+        self._fg0 = _THEME_VARS['dark']['fg0']
+        self._fg2 = _THEME_VARS['dark']['fg2']
         self.process: QProcess | None = None
         self._conpty: ConPtyProcess | None = None
         self._use_conpty = False
+        self._conpty_timer: QTimer | None = None
         self._history: list[str] = []
         self._history_index = -1
         self._utf8_ready = False
@@ -282,7 +293,7 @@ class _TerminalSession(QWidget):
 
         self._prompt = QLabel(">")
         self._prompt.setStyleSheet("color: #3fb950; font-weight: 700; font-size: 13px;")
-        input_layout.addWidget(prompt)
+        input_layout.addWidget(self._prompt)
 
         self.input = _TerminalInput()
         self.input.setObjectName("terminal-input")
@@ -327,10 +338,10 @@ class _TerminalSession(QWidget):
                 shell=self.shell,
                 cwd=self.cwd,
                 cols=80, rows=25,
-                on_output=self._on_conpty_raw,
-                on_exit=self._on_conpty_exit,
             )
-            self.output_received.connect(self._on_conpty_output)
+            self._conpty_timer = QTimer()
+            self._conpty_timer.timeout.connect(self._poll_conpty)
+            self._conpty_timer.start(10)
             self._conpty = cp
             self._use_conpty = True
             QTimer.singleShot(200, self._activate_venv)
@@ -342,8 +353,14 @@ class _TerminalSession(QWidget):
             self._use_conpty = False
             self._conpty = None
 
-    def _on_conpty_raw(self, data: bytes):
-        self.output_received.emit(data)
+    def _poll_conpty(self):
+        if not self._conpty or not self._use_conpty:
+            return
+        data = self._conpty.read()
+        if data:
+            self._on_conpty_output(data)
+        if not self._conpty.is_running():
+            self._on_conpty_exit()
 
     def _on_conpty_output(self, data: bytes):
         try:
@@ -470,36 +487,77 @@ class _TerminalSession(QWidget):
         self.output.ensureCursorVisible()
 
     def _insert_ansi(self, cursor: QTextCursor, text: str):
+        if _HAS_RUST_ANSI:
+            # Handle J/K manually (cursor ops not suitable for Rust)
+            jk_actions: list[tuple[str, str]] = []
+            i = 0
+            while i < len(text):
+                if text[i] == "\x1b" and i + 1 < len(text) and text[i + 1] == "[":
+                    j = i + 2
+                    while j < len(text) and not (0x40 <= ord(text[j]) <= 0x7E):
+                        j += 1
+                    if j < len(text):
+                        final_byte = text[j]
+                        params = text[i + 2:j]
+                        if final_byte == "J":
+                            jk_actions.append(("J", params))
+                        elif final_byte == "K":
+                            jk_actions.append(("K", params))
+                    i = j + 1
+                else:
+                    i += 1
+            # Use Rust for SGR text segmentation
+            segments = _rust_parse_ansi(text, self._fg0, self._fg2)
+            for seg in segments:
+                fmt = QTextCharFormat()
+                if seg.fg:
+                    fmt.setForeground(QColor(seg.fg))
+                if seg.bg:
+                    fmt.setBackground(QColor(seg.bg))
+                if seg.bold:
+                    fmt.setFontWeight(QFont.Weight.Bold)
+                cursor.insertText(seg.text, fmt)
+            for action, params in jk_actions:
+                if action == "J" and params in ("", "0", "2"):
+                    cursor.select(QTextCursor.SelectionType.Document)
+                    cursor.removeSelectedText()
+                elif action == "K":
+                    if params in ("", "0"):
+                        cursor.movePosition(QTextCursor.MoveOperation.EndOfLine, QTextCursor.MoveMode.KeepAnchor)
+                        cursor.removeSelectedText()
+                    elif params == "2":
+                        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine, QTextCursor.MoveMode.KeepAnchor)
+                        cursor.removeSelectedText()
+            return
+
+        # Fallback: Python ANSI parser
         fmt = QTextCharFormat()
         i = 0
-        while i < len(text):
+        n = len(text)
+        while i < n:
             if text[i] != "\x1b":
-                chunk = ""
-                j = i
-                while j < len(text) and text[j] != "\x1b":
-                    chunk += text[j]
-                    j += 1
-                cursor.insertText(chunk, fmt)
+                j = text.find("\x1b", i)
+                if j == -1:
+                    j = n
+                cursor.insertText(text[i:j], fmt)
                 i = j
                 continue
-            # Escape sequence
             if i + 1 >= len(text):
                 break
             if text[i + 1] == "[":
-                # CSI: \x1b[ ... <final byte 0x40-0x7E>
                 j = i + 2
                 while j < len(text) and not (0x40 <= ord(text[j]) <= 0x7E):
                     j += 1
                 if j < len(text):
-                    final = text[j]
+                    final_byte = text[j]
                     params = text[i + 2:j]
-                    if final == "m":
+                    if final_byte == "m":
                         self._apply_sgr(fmt, params)
-                    elif final == "J":
+                    elif final_byte == "J":
                         if params in ("", "0", "2"):
                             cursor.select(QTextCursor.SelectionType.Document)
                             cursor.removeSelectedText()
-                    elif final == "K":
+                    elif final_byte == "K":
                         if params in ("", "0"):
                             cursor.movePosition(QTextCursor.MoveOperation.EndOfLine, QTextCursor.MoveMode.KeepAnchor)
                             cursor.removeSelectedText()
@@ -508,7 +566,6 @@ class _TerminalSession(QWidget):
                             cursor.removeSelectedText()
                 i = j + 1
             elif text[i + 1] == "]":
-                # OSC: \x1b] ... \x07 or \x1b\\
                 j = i + 2
                 while j < len(text) and text[j] != "\x07":
                     if text[j] == "\x1b" and j + 1 < len(text) and text[j + 1] == "\\":
@@ -516,14 +573,12 @@ class _TerminalSession(QWidget):
                         break
                     j += 1
                 else:
-                    j += 1  # skip \x07
+                    j += 1
                 i = j
             else:
-                # Other escape: skip 2 chars
                 i += 2
 
-    @staticmethod
-    def _apply_sgr(fmt: QTextCharFormat, params: str):
+    def _apply_sgr(self, fmt: QTextCharFormat, params: str):
         if not params:
             params = "0"
         try:
@@ -625,6 +680,9 @@ class _TerminalSession(QWidget):
         self.input.setFocus()
 
     def terminate(self):
+        if self._conpty_timer:
+            self._conpty_timer.stop()
+            self._conpty_timer = None
         if self._use_conpty and self._conpty:
             self._conpty.close()
             self._conpty = None
@@ -634,6 +692,32 @@ class _TerminalSession(QWidget):
                 self.process.kill()
             except Exception:
                 pass
+
+    def set_theme(self, dark: bool):
+        self._dark = dark
+        v = _THEME_VARS['dark' if dark else 'light']
+        self._fg0 = v['fg0']
+        self._fg2 = v['fg2']
+        self.output.setStyleSheet(f'''
+            QTextEdit#terminal-output {{
+                background-color: {v['bg0']};
+                color: {v['fg0']};
+                border: none;
+                padding: 4px 8px;
+                font-size: 13px;
+            }}
+        ''')
+        pc = '#3fb950' if dark else '#1a7f37'
+        self._prompt.setStyleSheet(f'color: {pc}; font-weight: 700; font-size: 13px;')
+        self.input.setStyleSheet(f'''
+            QLineEdit#terminal-input {{
+                background: transparent;
+                border: none;
+                color: {v['fg0']};
+                font-size: 13px;
+                padding: 2px 0;
+            }}
+        ''')
 
 
 class TerminalWidget(QWidget):
@@ -714,34 +798,9 @@ class TerminalWidget(QWidget):
 
     def _on_theme_changed(self, theme: str, **kwargs):
         self._dark = theme == 'dark'
-        v = _THEME_VARS['dark' if self._dark else 'light']
-        self._fg0 = v['fg0']
-        self._fg2 = v['fg2']
-        self._update_styles()
-
-    def _update_styles(self):
         self.setStyleSheet(self._styles())
-        v = _THEME_VARS['dark' if self._dark else 'light']
-        self.output.setStyleSheet(f'''
-            QTextEdit#terminal-output {{
-                background-color: {v['bg0']};
-                color: {v['fg0']};
-                border: none;
-                padding: 4px 8px;
-                font-size: 13px;
-            }}
-        ''')
-        pc = '#3fb950' if self._dark else '#1a7f37'
-        self._prompt.setStyleSheet(f'color: {pc}; font-weight: 700; font-size: 13px;')
-        self.input.setStyleSheet(f'''
-            QLineEdit#terminal-input {{
-                background: transparent;
-                border: none;
-                color: {v['fg0']};
-                font-size: 13px;
-                padding: 2px 0;
-            }}
-        ''')
+        for session in self._sessions:
+            session.set_theme(self._dark)
 
     def _add_session(self, shell: str | None = None, cwd: str | None = None):
         if shell is None:
@@ -756,6 +815,7 @@ class TerminalWidget(QWidget):
 
         session = _TerminalSession(shell, cwd)
         session.output.linkClicked.connect(self._open_link)
+        session.set_theme(self._dark)
         self._sessions.append(session)
         idx = self._stack.addWidget(session)
         self._tab_bar.addTab(name)

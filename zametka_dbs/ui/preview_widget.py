@@ -5,7 +5,7 @@ from assets.icons import icon
 from zametka_dbs.preview.renderer import render_markdown
 from zametka_dbs.core.config import get_config
 from zametka_dbs.core.event_bus import get_bus, Events
-from zametka_dbs.ui.pdf_viewer import PdfViewer
+from zametka_dbs.ui.document_viewer import DocumentViewer
 
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"}
@@ -70,11 +70,11 @@ class PreviewWidget(QWidget):
         self._image_scroll.setWidget(self._image_label)
         layout.addWidget(self._image_scroll)
 
-        # PDF viewer (hidden by default)
-        self._pdf_viewer = PdfViewer()
-        self._pdf_viewer.setObjectName("preview-pdf")
-        self._pdf_viewer.setVisible(False)
-        layout.addWidget(self._pdf_viewer)
+        # Document viewer (hidden by default)
+        self._doc_viewer = DocumentViewer()
+        self._doc_viewer.setObjectName("preview-doc")
+        self._doc_viewer.setVisible(False)
+        layout.addWidget(self._doc_viewer)
 
         # Debounce timer
         self._timer = QTimer()
@@ -99,7 +99,7 @@ class PreviewWidget(QWidget):
     def show_image(self, filepath: str):
         self._timer.stop()
         self._browser.setVisible(False)
-        self._pdf_viewer.setVisible(False)
+        self._doc_viewer.setVisible(False)
         self._image_scroll.setVisible(True)
         from PyQt6.QtGui import QPixmap
         pix = QPixmap(filepath)
@@ -113,17 +113,17 @@ class PreviewWidget(QWidget):
                              Qt.TransformationMode.SmoothTransformation)
         self._image_label.setPixmap(pix)
 
-    def show_pdf(self, filepath: str):
+    def show_document(self, filepath: str):
         self._timer.stop()
         self._browser.setVisible(False)
         self._image_scroll.setVisible(False)
-        self._pdf_viewer.setVisible(True)
-        self._pdf_viewer.load(filepath)
+        self._doc_viewer.setVisible(True)
+        self._doc_viewer.load(filepath)
 
     def set_html(self, html: str):
         self._timer.stop()
         self._image_scroll.setVisible(False)
-        self._pdf_viewer.setVisible(False)
+        self._doc_viewer.setVisible(False)
         self._browser.setVisible(True)
         try:
             self._browser.setHtml(html)
@@ -153,8 +153,8 @@ class PreviewWidget(QWidget):
         self._source = ""
         self._browser.clear()
         self._image_scroll.setVisible(False)
-        self._pdf_viewer.setVisible(False)
-        self._pdf_viewer.clear()
+        self._doc_viewer.setVisible(False)
+        self._doc_viewer.clear()
         self._browser.setVisible(True)
         self._image_label.clear()
         self.update_content("")

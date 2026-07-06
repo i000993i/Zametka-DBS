@@ -15,6 +15,7 @@ from zametka_dbs.ui.styles import _THEME_VARS
 class CodeEditor(QPlainTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._dark = True
         self._bus = get_bus()
         config = get_config()
 

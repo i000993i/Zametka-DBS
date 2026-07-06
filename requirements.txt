@@ -4,3 +4,4 @@ markdown-it-py>=3.0
 watchdog>=4.0
 winshell>=0.6
 pywin32>=306
+PyMuPDF 

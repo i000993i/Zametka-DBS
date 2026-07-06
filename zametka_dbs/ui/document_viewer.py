@@ -1,38 +1,47 @@
 import os
-import traceback
+import subprocess
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QSpinBox, QSlider, QComboBox, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QPixmap, QKeyEvent
-
-try:
-    from PyQt6.QtPdf import QPdfDocument, QPdfDocumentRenderOptions
-except ImportError:
-    QPdfDocument = None
-    QPdfDocumentRenderOptions = None
+from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QColor
 
 from assets.icons import icon
 
+try:
+    import fitz
+except ImportError:
+    fitz = None
+
 
 ZOOM_PRESETS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
+BASE_DPI = 72
+RENDER_DPI = 150
 CACHE_LIMIT = 20
-RENDER_BATCH_MS = 5
 VISIBLE_BUFFER = 3
 
+DBS_RENDERER = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "dbs-renderer", "target", "release", "dbs-renderer.exe",
+)
 
-class PdfViewer(QWidget):
+# Formats supported by MuPDF
+VIEWER_EXTS = {
+    ".pdf", ".xps", ".epub", ".cbz", ".cbr", ".fb2", ".txt",
+}
+
+
+class DocumentViewer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._document = None
+        self._doc = None
         self._filepath = ""
         self._current_page = 0
         self._scale = 1.0
-        self._dpr = 1.0
-        self._page_sizes: list[QSize] = []
         self._page_count = 0
+        self._page_rects: list = []
         self._loaded = False
 
         self._cache: dict[int, QPixmap] = {}
@@ -49,19 +58,12 @@ class PdfViewer(QWidget):
         self._debounce_timer.setSingleShot(True)
         self._debounce_timer.timeout.connect(self._flush_rebuild)
 
-        self._init_document()
         self._init_ui()
 
-    def _init_document(self):
-        if QPdfDocument is None:
-            return
-        self._document = QPdfDocument(self)
-        self._document.statusChanged.connect(self._on_status_changed)
-
-    def _ensure_document(self):
-        if self._document is None and QPdfDocument is not None:
-            self._document = QPdfDocument(self)
-            self._document.statusChanged.connect(self._on_status_changed)
+    @staticmethod
+    def can_open(path: str) -> bool:
+        ext = os.path.splitext(path)[1].lower()
+        return ext in VIEWER_EXTS
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -159,12 +161,13 @@ class PdfViewer(QWidget):
         self._page_layout.setSpacing(12)
         self._page_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._no_pdf_label = QLabel(
-            "PDF support not available" if QPdfDocument is None else "No PDF loaded"
+        self._no_doc_label = QLabel(
+            "Document viewer not available (install PyMuPDF)" if fitz is None
+            else "Open a PDF or document file"
         )
-        self._no_pdf_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._no_pdf_label.setStyleSheet("font-size: 14px; padding: 40px;")
-        self._page_layout.addWidget(self._no_pdf_label)
+        self._no_doc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._no_doc_label.setStyleSheet("font-size: 14px; padding: 40px;")
+        self._page_layout.addWidget(self._no_doc_label)
 
         self._scroll.setWidget(self._container)
         layout.addWidget(self._scroll, 1)
@@ -214,10 +217,13 @@ class PdfViewer(QWidget):
             super().keyPressEvent(event)
 
     def load(self, filepath: str):
+        if fitz is None:
+            self._show_error("PyMuPDF not installed")
+            return
         if not os.path.isfile(filepath):
             self._show_error(f"File not found: {filepath}")
             return
-        self._ensure_document()
+        self._close_doc()
         self._filepath = filepath
         self._current_page = 0
         self._scale = 1.0
@@ -228,27 +234,37 @@ class PdfViewer(QWidget):
         self._render_queue.clear()
         self._rebuild_queued = False
         self._update_zoom_controls()
-        self._no_pdf_label.setText("Loading PDF...")
-        self._no_pdf_label.setVisible(True)
+        self._no_doc_label.setText("Loading...")
+        self._no_doc_label.setVisible(True)
         self._clear_pages()
 
-        if self._document:
-            self._document.close()
-            try:
-                self._document.load(filepath)
-            except Exception as e:
-                self._show_error(f"Load failed: {e}")
+        try:
+            self._doc = fitz.open(filepath)
+            self._page_count = self._doc.page_count
+            self._page_rects = [self._doc[i].rect for i in range(self._page_count)]
+            self._loaded = True
+            self._build_placeholders()
+            self._queue_rebuild()
+        except Exception as e:
+            self._show_error(f"Open failed: {e}")
 
     def clear(self):
+        self._close_doc()
+        self._show_error("No document loaded")
+
+    def _close_doc(self):
         self._filepath = ""
         self._loaded = False
         self._cache.clear()
         self._error_pages.clear()
         self._render_pending.clear()
         self._render_queue.clear()
-        if self._document:
-            self._document.close()
-        self._show_error("No PDF loaded")
+        if self._doc:
+            try:
+                self._doc.close()
+            except Exception:
+                pass
+            self._doc = None
 
     def _show_error(self, msg: str):
         self._page_count_label.setText("of 0")
@@ -257,44 +273,8 @@ class PdfViewer(QWidget):
         self._page_spinner.setValue(1)
         self._page_spinner.blockSignals(False)
         self._clear_pages()
-        self._no_pdf_label.setText(msg)
-        self._no_pdf_label.setVisible(True)
-
-    # --- Document loading ---
-
-    def _on_status_changed(self, status):
-        try:
-            if status == QPdfDocument.Status.Ready:
-                self._dpr = max(1.0, self.devicePixelRatio())
-                self._page_count = self._document.pageCount()
-                if self._page_count == 0:
-                    self._show_error(f"No pages in PDF: {self._filepath}")
-                    return
-                self._page_sizes = []
-                for i in range(self._page_count):
-                    sz = QSize(612, 792)
-                    try:
-                        sz = self._document.pagePointSize(i)
-                    except AttributeError:
-                        try:
-                            sz = self._document.pageSize(i)
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
-                    self._page_sizes.append(sz)
-                self._loaded = True
-                self._build_placeholders()
-                self._queue_rebuild()
-            elif status == QPdfDocument.Status.Error:
-                err_msg = f"Error loading PDF"
-                if self._filepath:
-                    err_msg += f": {os.path.basename(self._filepath)}"
-                self._show_error(err_msg)
-        except Exception as e:
-            self._show_error(f"PDF error: {e}")
-
-    # --- Page widget management ---
+        self._no_doc_label.setText(msg)
+        self._no_doc_label.setVisible(True)
 
     def _clear_pages(self):
         for w in self._page_widgets:
@@ -305,7 +285,7 @@ class PdfViewer(QWidget):
     def _build_placeholders(self):
         if self._page_count == 0:
             return
-        self._no_pdf_label.setVisible(False)
+        self._no_doc_label.setVisible(False)
         self._clear_pages()
 
         self._page_count_label.setText(f"of {self._page_count}")
@@ -332,38 +312,79 @@ class PdfViewer(QWidget):
         else:
             pw.show_loading()
 
-    # --- Rendering ---
-
     def _render_page(self, idx: int):
         if idx in self._cache or idx in self._error_pages:
             return
-        if idx < 0 or idx >= self._page_count or not self._document:
+        if idx < 0 or idx >= self._page_count:
             return
 
-        ps = self._page_sizes[idx]
-        if ps.width() == 0 or ps.height() == 0:
+        if self._render_page_process(idx):
+            return
+        self._render_page_local(idx)
+
+    def _render_page_process(self, idx: int) -> bool:
+        if not os.path.isfile(DBS_RENDERER):
+            return False
+        dpi = int(RENDER_DPI * self._scale)
+        try:
+            result = subprocess.run(
+                [DBS_RENDERER, self._filepath, str(idx), str(dpi)],
+                capture_output=True, timeout=30,
+            )
+            if result.returncode != 0:
+                return False
+            raw = result.stdout
+            if not raw.startswith(b"DATA "):
+                return False
+            nl = raw.index(b"\n", 5)
+            header = raw[5:nl].decode()
+            w, h = map(int, header.split())
+            data = raw[nl + 1:]
+            if len(data) != w * h * 4:
+                return False
+            img = QImage(data, w, h, w * 4, QImage.Format.Format_RGBA8888)
+            if img.isNull():
+                return False
+            qp = QPixmap.fromImage(img)
+            if qp.isNull():
+                return False
+            self._cache[idx] = qp
+            self._error_pages.pop(idx, None)
+            self._update_widget(idx)
+            return True
+        except Exception:
+            return False
+
+    def _render_page_local(self, idx: int):
+        if not self._doc:
+            self._error_pages[idx] = "no document"
+            self._update_widget(idx)
+            return
+        rect = self._page_rects[idx]
+        if rect.width <= 0 or rect.height <= 0:
             self._error_pages[idx] = "empty page"
             self._update_widget(idx)
             return
 
-        # Try rendering at progressively lower scales if it fails
-        for attempt in (1.0, 0.5, 0.25):
-            target_w = max(1, int(ps.width() * self._scale * self._dpr * attempt))
-            target_h = max(1, int(ps.height() * self._scale * self._dpr * attempt))
-            # Cap to avoid excessive memory
-            target_w = min(target_w, 4000)
-            target_h = min(target_h, 4000)
+        dpi = int(RENDER_DPI * self._scale)
+        zoom = dpi / BASE_DPI
 
+        for attempt in (1.0, 0.5, 0.25):
             try:
-                opts = QPdfDocumentRenderOptions()
-                img = self._document.render(idx, QSize(target_w, target_h), opts)
+                mat2 = fitz.Matrix(zoom * attempt, zoom * attempt)
+                pix = self._doc[idx].get_pixmap(matrix=mat2)
+                if pix is None or pix.samples is None or len(pix.samples) == 0:
+                    continue
+                img = QImage(
+                    pix.samples, pix.width, pix.height,
+                    pix.stride, QImage.Format.Format_RGB888
+                )
                 if img.isNull():
                     continue
-                pix = QPixmap.fromImage(img)
-                if pix.isNull():
+                qp = QPixmap.fromImage(img)
+                if qp.isNull():
                     continue
-                pix.setDevicePixelRatio(self._dpr)
-                self._cache[idx] = pix
+                self._cache[idx] = qp
                 self._error_pages.pop(idx, None)
                 self._update_widget(idx)
                 return
@@ -397,13 +418,10 @@ class PdfViewer(QWidget):
     def _build_render_queue(self) -> list[int]:
         visible = self._get_visible_range()
         needed = set(range(visible[0], visible[1] + 1))
-        # Preload pages around visible range
         for i in range(max(0, visible[0] - 6), visible[0]):
             needed.add(i)
         for i in range(visible[1] + 1, min(self._page_count, visible[1] + 6)):
             needed.add(i)
-
-        # Filter out already cached/errored/pending
         return sorted(
             i for i in needed
             if i not in self._cache and i not in self._error_pages and i not in self._render_pending
@@ -414,7 +432,7 @@ class PdfViewer(QWidget):
             return
         self._rebuild_queued = True
         if not self._batch_timer.isActive():
-            self._batch_timer.start(RENDER_BATCH_MS)
+            self._batch_timer.start(5)
 
     def _flush_rebuild(self):
         self._rebuild_queued = False
@@ -422,7 +440,6 @@ class PdfViewer(QWidget):
 
     def _render_next_batch(self):
         if self._rebuild_queued:
-            # Rebuild queue to pick up new visible range
             self._render_queue = self._build_render_queue()
             self._rebuild_queued = False
             self._evict_cache()
@@ -436,14 +453,14 @@ class PdfViewer(QWidget):
         self._render_pending.discard(idx)
 
         if self._render_queue:
-            self._batch_timer.start(RENDER_BATCH_MS)
+            self._batch_timer.start(5)
 
     def _evict_cache(self):
         visible = self._get_visible_range()
         keep = set(range(max(0, visible[0] - 8), min(self._page_count, visible[1] + 8)))
-        to_evict = [k for k in self._cache if k not in keep]
-        for k in to_evict:
-            del self._cache[k]
+        for k in list(self._cache):
+            if k not in keep:
+                del self._cache[k]
 
     def _rebuild(self):
         self._cache.clear()
@@ -454,7 +471,9 @@ class PdfViewer(QWidget):
             pw.show_loading()
         self._queue_rebuild()
 
-    # --- Navigation ---
+    def _on_scrolled(self, _value: int = 0):
+        if self._loaded and self._page_widgets:
+            self._queue_rebuild()
 
     def _go_to_page(self, page: int):
         idx = page - 1
@@ -476,8 +495,6 @@ class PdfViewer(QWidget):
 
     def _prev_page(self):
         self._go_to_page_val(self._page_spinner.value() - 1)
-
-    # --- Zoom ---
 
     def _zoom_in(self):
         idx = self._closest_zoom_index()
@@ -531,29 +548,25 @@ class PdfViewer(QWidget):
         self._zoom_combo.blockSignals(False)
 
     def _fit_to_width(self):
-        if self._page_count == 0:
+        if self._page_count == 0 or not self._page_rects:
             return
         sw = self._scroll.viewport().width() - 40
-        pw = self._page_sizes[0].width()
+        pw = self._page_rects[0].width
         if pw > 0:
-            self._scale = max(0.1, (sw / pw) / self._dpr)
+            self._scale = max(0.1, sw / pw)
             self._apply_zoom()
 
     def _fit_to_page(self):
-        if self._page_count == 0:
+        if self._page_count == 0 or not self._page_rects:
             return
         sw = self._scroll.viewport().width() - 40
         sh = self._scroll.viewport().height() - 60
-        pp = self._page_sizes[0]
-        if pp.width() > 0 and pp.height() > 0:
-            scale_w = (sw / pp.width()) / self._dpr
-            scale_h = (sh / pp.height()) / self._dpr
+        pp = self._page_rects[0]
+        if pp.width > 0 and pp.height > 0:
+            scale_w = sw / pp.width
+            scale_h = sh / pp.height
             self._scale = max(0.1, min(scale_w, scale_h))
             self._apply_zoom()
-
-    def _on_scrolled(self, _value: int = 0):
-        if self._loaded and self._page_widgets:
-            self._queue_rebuild()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

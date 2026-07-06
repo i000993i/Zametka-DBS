@@ -135,6 +135,7 @@ class PinnedWidget(QWidget):
         self._list.model().rowsMoved.connect(self._sync_list_to_config)
         layout.addWidget(self._list)
 
+        self._clean_missing()
         self._load_pins()
 
     def _show_pin_menu(self):
@@ -187,11 +188,27 @@ class PinnedWidget(QWidget):
         config = get_config()
         pinned = config.get("pinned.items", [])
         has_items = False
+        max_items = 20
+        shown = 0
         for path in pinned:
             if not os.path.exists(path):
                 continue
+            if shown >= max_items:
+                break
             self._add_item(path)
+            shown += 1
             has_items = True
+        remaining = len(pinned) - shown
+        if remaining > 0:
+            item = QListWidgetItem()
+            item.setText(f"... и ещё {remaining}")
+            item.setData(Qt.ItemDataRole.UserRole, "")
+            item.setFlags(Qt.ItemFlag.ItemIsSelectable)
+            from PyQt6.QtGui import QFont
+            f = QFont()
+            f.setItalic(True)
+            item.setFont(f)
+            self._list.addItem(item)
         self._list.setVisible(has_items)
 
     def _add_item(self, path: str):

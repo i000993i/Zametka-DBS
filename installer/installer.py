@@ -111,7 +111,9 @@ class InstallThread(QThread):
                         break
             self.status.emit("Создание ярлыков...")
             self._create_shortcuts(exe_path)
+            self.status.emit("Регистрация файлов...")
             self._register_file_assoc(exe_path)
+            self.status.emit("Настройка удаления...")
             self._write_uninstall(exe_path)
             self.status.emit("Установка завершена!")
             self.finished.emit()
@@ -119,31 +121,46 @@ class InstallThread(QThread):
             self.error.emit(str(e))
 
     def _create_shortcuts(self, exe_path):
-        import winshell
-        icon_path = str(exe_path)
-        if self.create_desktop:
-            desktop = Path(winshell.desktop())
-            link = desktop / "Zametka.lnk"
-            self._make_link(str(exe_path), str(link), icon_path)
-        if self.create_startmenu:
-            start = Path(winshell.programs()) / "Zametka"
-            start.mkdir(parents=True, exist_ok=True)
-            link = start / "Zametka.lnk"
-            self._make_link(str(exe_path), str(link), icon_path)
-            unlink = start / "Uninstall.lnk"
-            uninst = Path(self.install_dir) / "uninstall.cmd"
-            self._make_link(str(uninst), str(unlink), str(uninst))
+        try:
+            import winshell
+            icon_path = str(exe_path)
+            if self.create_desktop:
+                self.status.emit("Ярлык на рабочем столе...")
+                desktop = Path(winshell.desktop())
+                link = desktop / "Zametka.lnk"
+                self._make_link(str(exe_path), str(link), icon_path)
+            if self.create_startmenu:
+                self.status.emit("Ярлык в меню Пуск...")
+                start = Path(winshell.programs()) / "Zametka"
+                start.mkdir(parents=True, exist_ok=True)
+                link = start / "Zametka.lnk"
+                self._make_link(str(exe_path), str(link), icon_path)
+                unlink = start / "Uninstall.lnk"
+                uninst = Path(self.install_dir) / "uninstall.cmd"
+                self._make_link(str(uninst), str(unlink), str(uninst))
+        except Exception as e:
+            self.status.emit(f"Предупреждение: ярлыки не созданы ({e})")
 
-    def _make_link(self, target, link_path, icon_path):
-        import pythoncom
-        from win32com.client import Dispatch
-        pythoncom.CoInitialize()
-        shell = Dispatch("WScript.Shell")
-        shortcut = shell.CreateShortCut(str(link_path))
-        shortcut.TargetPath = target
-        shortcut.IconLocation = icon_path
-        shortcut.WorkingDirectory = str(Path(target).parent)
-        shortcut.Save()
+    def _make_link(self, target_path, link_path, icon_path):
+        try:
+            import pythoncom
+            from win32com.client import Dispatch
+            pythoncom.CoInitialize()
+            shell = Dispatch("WScript.Shell")
+            shortcut = shell.CreateShortCut(str(link_path))
+            shortcut.TargetPath = target_path
+            shortcut.IconLocation = icon_path
+            shortcut.WorkingDirectory = str(Path(target_path).parent)
+            shortcut.Save()
+        except Exception as e:
+            self.status.emit(f"Не удалось создать ярлык: {e}")
+            # Fallback: create a simple batch file launcher instead
+            if not os.path.exists(link_path):
+                try:
+                    with open(link_path, "w") as f:
+                        f.write(f'@start "" "{target_path}"')
+                except Exception:
+                    pass
 
     def _register_file_assoc(self, exe_path):
         import winreg

@@ -1,4 +1,4 @@
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __author__ = "Zametka Team"
 __repo__ = "https://github.com/i000993i/Zametka-DBS"
 __api_url__ = "https://api.github.com/repos/i000993i/Zametka-DBS/releases/latest"

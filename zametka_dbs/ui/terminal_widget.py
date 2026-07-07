@@ -327,6 +327,10 @@ class _TerminalSession(QWidget):
             logger.error(f"Terminal session failed to start with shell: {self.shell}")
 
     def _try_conpty(self):
+        if not HAS_CONPTY or ConPtyProcess is None:
+            self._use_conpty = False
+            self._conpty = None
+            return
         cp = ConPtyProcess()
         try:
             cp.start(

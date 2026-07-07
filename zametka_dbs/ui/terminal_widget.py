@@ -362,10 +362,26 @@ class _TerminalSession(QWidget):
             self._on_conpty_exit()
 
     def _on_conpty_output(self, data: bytes):
-        try:
-            text = data.decode(self._sys_enc, errors="replace")
-        except LookupError:
-            text = data.decode("utf-8", errors="replace")
+        if self._utf8_ready:
+            text = self._decoder.decode(data)
+            if "\ufffd" in text:
+                self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
+                ratio = text.count("\ufffd") / max(len(text), 1)
+                if ratio > 0.10:
+                    best = data.decode("utf-8", errors="replace")
+                    for enc in self._fallback_encs:
+                        try:
+                            cand = data.decode(enc, errors="replace")
+                        except LookupError:
+                            continue
+                        if "\ufffd" not in cand and "\ufffd" in best:
+                            best = cand
+                    text = best
+        else:
+            try:
+                text = data.decode(self._sys_enc, errors="replace")
+            except LookupError:
+                text = data.decode("utf-8", errors="replace")
         self._print(text)
 
     def _on_conpty_exit(self):

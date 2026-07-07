@@ -120,26 +120,30 @@ class InstallThread(QThread):
         except Exception as e:
             self.error.emit(str(e))
 
+    @staticmethod
+    def _shell_folder(csidl):
+        import ctypes
+        from ctypes import wintypes
+        buf = wintypes.create_unicode_buffer(260)
+        ctypes.windll.shell32.SHGetFolderPathW(None, csidl, None, 0, buf)
+        return buf.value
+
     def _create_shortcuts(self, exe_path):
-        try:
-            import winshell
-            icon_path = str(exe_path)
-            if self.create_desktop:
-                self.status.emit("Ярлык на рабочем столе...")
-                desktop = Path(winshell.desktop())
-                link = desktop / "Zametka.lnk"
-                self._make_link(str(exe_path), str(link), icon_path)
-            if self.create_startmenu:
-                self.status.emit("Ярлык в меню Пуск...")
-                start = Path(winshell.programs()) / "Zametka"
-                start.mkdir(parents=True, exist_ok=True)
-                link = start / "Zametka.lnk"
-                self._make_link(str(exe_path), str(link), icon_path)
-                unlink = start / "Uninstall.lnk"
-                uninst = Path(self.install_dir) / "uninstall.cmd"
-                self._make_link(str(uninst), str(unlink), str(uninst))
-        except Exception as e:
-            self.status.emit(f"Предупреждение: ярлыки не созданы ({e})")
+        icon_path = str(exe_path)
+        if self.create_desktop:
+            self.status.emit("Ярлык на рабочем столе...")
+            desktop = Path(self._shell_folder(0x0000))
+            link = desktop / "Zametka.lnk"
+            self._make_link(str(exe_path), str(link), icon_path)
+        if self.create_startmenu:
+            self.status.emit("Ярлык в меню Пуск...")
+            start = Path(self._shell_folder(0x0002)) / "Zametka"
+            start.mkdir(parents=True, exist_ok=True)
+            link = start / "Zametka.lnk"
+            self._make_link(str(exe_path), str(link), icon_path)
+            unlink = start / "Uninstall.lnk"
+            uninst = Path(self.install_dir) / "uninstall.cmd"
+            self._make_link(str(uninst), str(unlink), str(uninst))
 
     def _make_link(self, target_path, link_path, icon_path):
         try:

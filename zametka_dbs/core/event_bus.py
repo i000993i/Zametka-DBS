@@ -123,6 +123,7 @@ class Events:
 
     THEME_CHANGED = "theme:changed"
     CONFIG_CHANGED = "config:changed"
+    LANGUAGE_CHANGED = "language:changed"
 
     APP_READY = "app:ready"
     APP_QUITTING = "app:quitting"

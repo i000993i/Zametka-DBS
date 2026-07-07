@@ -18,6 +18,7 @@ fn defaults() -> Value {
     json!({
         "vault_path": "",
         "theme": "dark",
+        "language": "ru",
         "editor": {
             "font_family": "Cascadia Code, JetBrains Mono, Consolas",
             "font_size": 14,
@@ -51,6 +52,60 @@ fn merge(base: &mut Value, override_val: &Value) {
             }
         }
         (base, override_val) => *base = override_val.clone(),
+    }
+}
+
+fn val_to_py(val: &Value, py: Python<'_>) -> PyObject {
+    match val {
+        Value::Null => py.None(),
+        Value::Bool(b) => b.into_py(py),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                i.into_py(py)
+            } else if let Some(f) = n.as_f64() {
+                f.into_py(py)
+            } else {
+                py.None()
+            }
+        }
+        Value::String(s) => s.clone().into_py(py),
+        Value::Array(arr) => {
+            let items: Vec<PyObject> = arr.iter().map(|v| val_to_py(v, py)).collect();
+            items.into_py(py)
+        }
+        Value::Object(obj) => {
+            let dict = pyo3::types::PyDict::new(py);
+            for (k, v) in obj {
+                dict.set_item(k.as_str(), val_to_py(v, py)).ok();
+            }
+            dict.into()
+        }
+    }
+}
+
+fn py_to_val(obj: &Bound<'_, PyAny>) -> PyResult<Value> {
+    if obj.is_none() {
+        Ok(Value::Null)
+    } else if let Ok(s) = obj.extract::<String>() {
+        Ok(Value::String(s))
+    } else if let Ok(b) = obj.extract::<bool>() {
+        Ok(Value::Bool(b))
+    } else if let Ok(i) = obj.extract::<i64>() {
+        Ok(Value::Number(i.into()))
+    } else if let Ok(f) = obj.extract::<f64>() {
+        Ok(Value::Number(serde_json::Number::from_f64(f).unwrap_or(serde_json::Number::from_f64(0.0).unwrap())))
+    } else if let Ok(list) = obj.extract::<Vec<Bound<'_, PyAny>>>() {
+        let items: PyResult<Vec<Value>> = list.iter().map(|item| py_to_val(item)).collect();
+        Ok(Value::Array(items?))
+    } else if let Ok(dict) = obj.downcast::<pyo3::types::PyDict>() {
+        let mut map = serde_json::Map::new();
+        for (k, v) in dict {
+            let key = k.extract::<String>()?;
+            map.insert(key, py_to_val(&v)?);
+        }
+        Ok(Value::Object(map))
+    } else {
+        Ok(Value::String(obj.to_string()))
     }
 }
 
@@ -89,30 +144,22 @@ impl Config {
         cfg
     }
 
-    #[pyo3(signature = (key, default=None))]
-    pub fn get(&self, key: &str, default: Option<&str>) -> String {
+    pub fn get(&self, key: &str, py: Python<'_>) -> PyObject {
         let keys: Vec<&str> = key.split('.').collect();
         let mut current = &self.data;
         for k in &keys {
             match current.get(*k) {
                 Some(v) => current = v,
-                None => return default.unwrap_or("").to_string(),
+                None => return py.None(),
             }
         }
-        match current {
-            Value::String(s) => s.clone(),
-            Value::Bool(b) => b.to_string(),
-            Value::Number(n) => n.to_string(),
-            Value::Array(a) => serde_json::to_string(a).unwrap_or_default(),
-            Value::Object(o) => serde_json::to_string(o).unwrap_or_default(),
-            Value::Null => default.unwrap_or("").to_string(),
-        }
+        val_to_py(current, py)
     }
 
-    pub fn set(&mut self, key: &str, value: &str) {
+    pub fn set(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let keys: Vec<&str> = key.split('.').collect();
         if keys.is_empty() {
-            return;
+            return Ok(());
         }
         let mut current = &mut self.data;
         for i in 0..keys.len() - 1 {
@@ -126,14 +173,9 @@ impl Config {
             current = current.get_mut(k).unwrap();
         }
         let last = keys[keys.len() - 1];
-        if let Ok(n) = value.parse::<f64>() {
-            current[last] = json!(n);
-        } else if let Ok(b) = value.parse::<bool>() {
-            current[last] = json!(b);
-        } else {
-            current[last] = json!(value);
-        }
+        current[last] = py_to_val(value)?;
         self.save();
+        Ok(())
     }
 
     fn save(&self) {

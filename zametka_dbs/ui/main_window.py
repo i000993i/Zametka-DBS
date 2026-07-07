@@ -17,6 +17,8 @@ from watchdog.events import FileSystemEventHandler
 from assets.icons import icon
 from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.core.config import get_config
+from zametka_dbs.core.i18n import tr, set_language, current_language
+from zametka_dbs.core.rust_bridge import HAS_RUST
 from zametka_dbs.ui.code_editor import CodeEditor
 from zametka_dbs.ui.file_tree_widget import FileTreeWidget
 from zametka_dbs.ui.document_viewer import DocumentViewer
@@ -120,6 +122,7 @@ class MainWindow(QMainWindow):
         # Drag & drop from OS
         self.setAcceptDrops(True)
 
+        self._init_i18n()
         self._init_window()
         self._create_activity_bar()
         self._create_sidebar()
@@ -147,6 +150,16 @@ class MainWindow(QMainWindow):
         self.bus.emit(Events.APP_READY)
         QTimer.singleShot(2000, self._auto_check_updates)
 
+    def _init_i18n(self):
+        lang = get_config().get("language", "ru")
+        set_language(lang)
+        self.bus.subscribe(Events.LANGUAGE_CHANGED, self._on_language_changed)
+
+    def _on_language_changed(self, **kwargs):
+        lang = get_config().get("language", "ru")
+        set_language(lang)
+        self._retranslate_ui()
+
     def _init_window(self):
         self.setWindowTitle("Zametka")
         self.setMinimumSize(1000, 600)
@@ -161,6 +174,58 @@ class MainWindow(QMainWindow):
         else:
             self.setWindowIcon(icon("file-text", "#eeeeee", size=32))
 
+    def _toggle_language(self):
+        lang = "en" if current_language() == "ru" else "ru"
+        get_config().set("language", lang)
+        self.bus.emit(Events.LANGUAGE_CHANGED)
+
+    def _retranslate_ui(self):
+        config = get_config()
+        current_theme = config.get("theme", "dark")
+        self._lang_btn.setText(tr("status.lang"))
+        self._lang_btn.setToolTip(tr("status.lang_tooltip"))
+        self._activity_bar.set_button_tooltip(0, tr("activity.explorer"))
+        self._activity_bar.set_button_tooltip(1, tr("activity.search"))
+        self._activity_bar.set_button_tooltip(2, tr("activity.notes"))
+        self._activity_bar.set_button_tooltip(3, tr("activity.history"))
+        self._vault_menu.setToolTip(tr("editor.tooltip.vault_menu"))
+        self._help_btn.setToolTip(tr("editor.tooltip.handbook"))
+        self._save_btn.setText(tr("editor.save"))
+        self._save_btn.setToolTip(tr("editor.tooltip.save"))
+        self._save_as_btn.setText(tr("editor.save_as"))
+        self._preview_toggle_btn.setToolTip(
+            tr("editor.tooltip.show_preview") if self._preview_visible
+            else tr("editor.tooltip.hide_preview")
+        )
+        self._split_btn.setToolTip(tr("editor.tooltip.split"))
+        self._search_btn.setText(tr("editor.search"))
+        self._terminal_btn.setToolTip(tr("editor.tooltip.terminal"))
+        self._file_search_edit.setPlaceholderText(tr("editor.search_placeholder"))
+        self.status_saved.setText(tr("status.saved"))
+
+        self._file_menu.setTitle(tr("menu.file"))
+        self._act_open_file.setText(tr("menu.file.open_file"))
+        self._act_open_folder.setText(tr("menu.file.open_folder"))
+        self._act_close_folder.setText(tr("menu.file.close_folder"))
+        self._act_save.setText(tr("menu.file.save"))
+        self._act_save_as.setText(tr("menu.file.save_as"))
+        self._act_quit.setText(tr("menu.file.quit"))
+        self._view_menu.setTitle(tr("menu.view"))
+        self._act_preview.setText(tr("menu.view.preview"))
+        self._act_terminal.setText(tr("menu.view.terminal"))
+        self._act_search.setText(tr("menu.view.search"))
+        self._act_file_search.setText(tr("menu.view.file_search"))
+        self._act_palette.setText(tr("menu.view.command_palette"))
+        self._act_split.setText(tr("menu.view.split_editor"))
+        self._act_theme.setText(
+            tr("menu.view.dark_theme") if current_theme == "light" else tr("menu.view.light_theme")
+        )
+        self._ref_menu.setTitle(tr("menu.help"))
+        self._act_handbook.setText(tr("menu.help.handbook"))
+        self._about_menu.setTitle(tr("menu.help.about"))
+        self._act_about.setText(tr("menu.help.about_zametka"))
+        self._act_update.setText(tr("menu.help.check_updates"))
+
     def _toggle_maximize(self):
         if self.isMaximized():
             self.showNormal()
@@ -169,13 +234,13 @@ class MainWindow(QMainWindow):
 
     def _create_activity_bar(self):
         self._activity_bar = ActivityBar()
-        self._explorer_btn = self._activity_bar.add_button("folder", "Explorer")
+        self._explorer_btn = self._activity_bar.add_button("folder", tr("activity.explorer"))
         self._explorer_btn.clicked.connect(lambda: self._switch_sidebar(0))
-        self._search_btn_ab = self._activity_bar.add_button("search", "Search")
+        self._search_btn_ab = self._activity_bar.add_button("search", tr("activity.search"))
         self._search_btn_ab.clicked.connect(lambda: self._switch_sidebar(1))
-        self._notes_btn = self._activity_bar.add_button("layout", "Notes")
+        self._notes_btn = self._activity_bar.add_button("layout", tr("activity.notes"))
         self._notes_btn.clicked.connect(lambda: self._switch_sidebar(2))
-        self._git_btn = self._activity_bar.add_button("git-branch", "History")
+        self._git_btn = self._activity_bar.add_button("git-branch", tr("activity.history"))
         self._git_btn.clicked.connect(lambda: self._switch_sidebar(3))
         self._activity_bar.layout().addStretch()
         self._activity_bar.set_active(0)
@@ -207,7 +272,7 @@ class MainWindow(QMainWindow):
         header_icon.setPixmap(icon("folder").pixmap(12, 12))
         header_icon.setFixedWidth(16)
         header_layout.addWidget(header_icon)
-        header_label = QLabel("EXPLORER")
+        header_label = QLabel(tr("sidebar.explorer"))
         header_label.setObjectName("vault-label")
         header_layout.addWidget(header_label)
         header_layout.addStretch()
@@ -218,7 +283,7 @@ class MainWindow(QMainWindow):
         self._vault_menu.setObjectName("icon-btn")
         self._vault_menu.setFixedSize(22, 22)
         self._vault_menu.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._vault_menu.setToolTip("Vault menu")
+        self._vault_menu.setToolTip(tr("editor.tooltip.vault_menu"))
         self._vault_menu.clicked.connect(self._show_vault_menu)
         header_layout.addWidget(self._vault_menu)
 
@@ -228,7 +293,7 @@ class MainWindow(QMainWindow):
         self._help_btn.setObjectName("icon-btn")
         self._help_btn.setFixedSize(22, 22)
         self._help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._help_btn.setToolTip("Open Handbook")
+        self._help_btn.setToolTip(tr("editor.tooltip.handbook"))
         self._help_btn.clicked.connect(self._open_handbook)
         header_layout.addWidget(self._help_btn)
 
@@ -236,7 +301,7 @@ class MainWindow(QMainWindow):
 
         self._file_search_edit = QLineEdit()
         self._file_search_edit.setObjectName("file-search-edit")
-        self._file_search_edit.setPlaceholderText("Search files...")
+        self._file_search_edit.setPlaceholderText(tr("editor.search_placeholder"))
         self._file_search_edit.setClearButtonEnabled(True)
         self._file_search_edit.setFixedHeight(28)
         self._file_search_edit.textChanged.connect(self._on_file_search_text_changed)
@@ -299,17 +364,17 @@ class MainWindow(QMainWindow):
 
         tab_row_layout.addSpacing(8)
 
-        self._save_btn = QPushButton(" Save")
+        self._save_btn = QPushButton(tr("editor.save"))
         self._save_btn.setIcon(icon("save"))
         self._save_btn.setIconSize(QSize(14, 14))
         self._save_btn.setObjectName("tab-btn")
         self._save_btn.setFixedHeight(24)
         self._save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._save_btn.setToolTip("Save (Ctrl+S)")
+        self._save_btn.setToolTip(tr("editor.tooltip.save"))
         self._save_btn.clicked.connect(self._save_current_file)
         tab_row_layout.addWidget(self._save_btn)
 
-        self._save_as_btn = QPushButton(" Save As…")
+        self._save_as_btn = QPushButton(tr("editor.save_as"))
         self._save_as_btn.setIcon(icon("save"))
         self._save_as_btn.setIconSize(QSize(14, 14))
         self._save_as_btn.setObjectName("tab-btn")
@@ -325,7 +390,7 @@ class MainWindow(QMainWindow):
         self._preview_toggle_btn.setObjectName("tab-btn")
         self._preview_toggle_btn.setFixedHeight(24)
         self._preview_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._preview_toggle_btn.setToolTip("Toggle Preview (Ctrl+P)")
+        self._preview_toggle_btn.setToolTip(tr("editor.tooltip.show_preview"))
         self._preview_toggle_btn.clicked.connect(self._toggle_preview)
         tab_row_layout.addWidget(self._preview_toggle_btn)
 
@@ -336,7 +401,7 @@ class MainWindow(QMainWindow):
         self._split_btn.setObjectName("tab-btn")
         self._split_btn.setFixedHeight(24)
         self._split_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._split_btn.setToolTip("Split Editor")
+        self._split_btn.setToolTip(tr("editor.tooltip.split"))
         self._split_btn.setCheckable(True)
         self._split_btn.clicked.connect(self._toggle_split)
         tab_row_layout.addWidget(self._split_btn)
@@ -348,7 +413,7 @@ class MainWindow(QMainWindow):
         self._html_toggle_btn.setObjectName("tab-btn")
         self._html_toggle_btn.setFixedHeight(24)
         self._html_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._html_toggle_btn.setToolTip("Просмотр HTML")
+        self._html_toggle_btn.setToolTip(tr("editor.tooltip.html"))
         self._html_toggle_btn.setVisible(False)
         self._html_toggle_btn.clicked.connect(self._toggle_html_view)
         tab_row_layout.addWidget(self._html_toggle_btn)
@@ -404,12 +469,12 @@ class MainWindow(QMainWindow):
         self.status_bar.setObjectName("status-bar")
         self.status_bar.setFixedHeight(26)
 
-        self.status_saved = QLabel("Saved")
-        self.status_cursor = QLabel("Ln 1, Col 1")
-        self.status_words = QLabel("Words: 0")
-        self.status_font = QLabel("System UI")
+        self.status_saved = QLabel(tr("status.saved"))
+        self.status_cursor = QLabel(tr("status.ln_col", ln=1, col=1))
+        self.status_words = QLabel(tr("status.words", count=0))
+        self.status_font = QLabel(tr("status.ui_theme"))
 
-        self._search_btn = QPushButton(" Search")
+        self._search_btn = QPushButton(tr("editor.search"))
         self._search_btn.setIcon(icon("search"))
         self._search_btn.setIconSize(QSize(14, 14))
         self._search_btn.setObjectName("search-btn")
@@ -423,11 +488,17 @@ class MainWindow(QMainWindow):
         self._terminal_btn.setObjectName("terminal-btn")
         self._terminal_btn.setFixedSize(20, 20)
         self._terminal_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._terminal_btn.setToolTip("Toggle Terminal (Ctrl+`)")
+        self._terminal_btn.setToolTip(tr("editor.tooltip.terminal"))
         self._terminal_btn.setCheckable(True)
         self._terminal_btn.clicked.connect(self._toggle_terminal)
 
-        self.status_info = QLabel("Ready")
+        self.status_info = QLabel(tr("status.ready"))
+
+        self._lang_btn = QPushButton()
+        self._lang_btn.setObjectName("terminal-btn")
+        self._lang_btn.setFixedSize(26, 20)
+        self._lang_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._lang_btn.clicked.connect(self._toggle_language)
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setObjectName("status-progress")
@@ -444,6 +515,7 @@ class MainWindow(QMainWindow):
         self.status_bar.addPermanentWidget(self.status_cursor)
         self.status_bar.addPermanentWidget(self.status_words)
         self.status_bar.addPermanentWidget(self.status_font)
+        self.status_bar.addPermanentWidget(self._lang_btn)
         self.status_bar.addPermanentWidget(self._progress_bar)
         self.status_bar.addPermanentWidget(self.status_info)
 
@@ -491,78 +563,78 @@ class MainWindow(QMainWindow):
 
     def _create_menu_bar(self):
         mb = self.menuBar()
-
-        file_menu = mb.addMenu("Файл")
-        act_open_file = QAction("Открыть файл...", self)
-        act_open_file.triggered.connect(self._open_file_dialog)
-        file_menu.addAction(act_open_file)
-        act_open_folder = QAction("Открыть папку...", self)
-        act_open_folder.triggered.connect(self._open_vault_dialog)
-        file_menu.addAction(act_open_folder)
-        act_close_folder = QAction("Закрыть папку", self)
-        act_close_folder.triggered.connect(self._close_current_vault)
-        file_menu.addAction(act_close_folder)
-        file_menu.addSeparator()
-        act_save = QAction("Сохранить", self)
-        act_save.triggered.connect(self._save_current_file)
-        file_menu.addAction(act_save)
-        act_save_as = QAction("Сохранить как...", self)
-        act_save_as.triggered.connect(self._save_as)
-        file_menu.addAction(act_save_as)
-        file_menu.addSeparator()
-        act_quit = QAction("Выход", self)
-        act_quit.triggered.connect(self.close)
-        file_menu.addAction(act_quit)
-
-        view_menu = mb.addMenu("Вид")
-        act_preview = QAction("Показать/скрыть предпросмотр", self)
-        act_preview.triggered.connect(self._toggle_preview)
-        view_menu.addAction(act_preview)
-        act_terminal = QAction("Показать/скрыть терминал", self)
-        act_terminal.triggered.connect(self._toggle_terminal)
-        view_menu.addAction(act_terminal)
-        act_search = QAction("Показать/скрыть поиск", self)
-        act_search.triggered.connect(self._toggle_search)
-        view_menu.addAction(act_search)
-        act_file_search = QAction("Показать/скрыть поиск файлов", self)
-        act_file_search.triggered.connect(self._toggle_file_search)
-        view_menu.addAction(act_file_search)
-        act_palette = QAction("Палитра команд", self)
-        act_palette.triggered.connect(self._toggle_command_palette)
-        view_menu.addAction(act_palette)
-        act_split = QAction("Разделить редактор", self)
-        act_split.triggered.connect(self._toggle_split)
-        view_menu.addAction(act_split)
-        view_menu.addSeparator()
         config = get_config()
         current_theme = config.get("theme", "dark")
-        act_theme = QAction("Светлая тема" if current_theme == "dark" else "Тёмная тема", self)
-        act_theme.triggered.connect(self._toggle_theme)
-        view_menu.addAction(act_theme)
 
-        ref_menu = mb.addMenu("Справочник")
-        act_handbook = QAction("Справочник по Markdown", self)
-        act_handbook.triggered.connect(self._open_handbook)
-        ref_menu.addAction(act_handbook)
+        self._file_menu = mb.addMenu(tr("menu.file"))
+        self._act_open_file = QAction(tr("menu.file.open_file"), self)
+        self._act_open_file.triggered.connect(self._open_file_dialog)
+        self._file_menu.addAction(self._act_open_file)
+        self._act_open_folder = QAction(tr("menu.file.open_folder"), self)
+        self._act_open_folder.triggered.connect(self._open_vault_dialog)
+        self._file_menu.addAction(self._act_open_folder)
+        self._act_close_folder = QAction(tr("menu.file.close_folder"), self)
+        self._act_close_folder.triggered.connect(self._close_current_vault)
+        self._file_menu.addAction(self._act_close_folder)
+        self._file_menu.addSeparator()
+        self._act_save = QAction(tr("menu.file.save"), self)
+        self._act_save.triggered.connect(self._save_current_file)
+        self._file_menu.addAction(self._act_save)
+        self._act_save_as = QAction(tr("menu.file.save_as"), self)
+        self._act_save_as.triggered.connect(self._save_as)
+        self._file_menu.addAction(self._act_save_as)
+        self._file_menu.addSeparator()
+        self._act_quit = QAction(tr("menu.file.quit"), self)
+        self._act_quit.triggered.connect(self.close)
+        self._file_menu.addAction(self._act_quit)
 
-        about_menu = mb.addMenu("О приложении")
-        act_about = QAction("О Zametka", self)
-        act_about.triggered.connect(self._show_about)
-        about_menu.addAction(act_about)
-        about_menu.addSeparator()
-        act_update = QAction("Проверить обновления...", self)
-        act_update.triggered.connect(self._check_updates)
-        about_menu.addAction(act_update)
+        self._view_menu = mb.addMenu(tr("menu.view"))
+        self._act_preview = QAction(tr("menu.view.preview"), self)
+        self._act_preview.triggered.connect(self._toggle_preview)
+        self._view_menu.addAction(self._act_preview)
+        self._act_terminal = QAction(tr("menu.view.terminal"), self)
+        self._act_terminal.triggered.connect(self._toggle_terminal)
+        self._view_menu.addAction(self._act_terminal)
+        self._act_search = QAction(tr("menu.view.search"), self)
+        self._act_search.triggered.connect(self._toggle_search)
+        self._view_menu.addAction(self._act_search)
+        self._act_file_search = QAction(tr("menu.view.file_search"), self)
+        self._act_file_search.triggered.connect(self._toggle_file_search)
+        self._view_menu.addAction(self._act_file_search)
+        self._act_palette = QAction(tr("menu.view.command_palette"), self)
+        self._act_palette.triggered.connect(self._toggle_command_palette)
+        self._view_menu.addAction(self._act_palette)
+        self._act_split = QAction(tr("menu.view.split_editor"), self)
+        self._act_split.triggered.connect(self._toggle_split)
+        self._view_menu.addAction(self._act_split)
+        self._view_menu.addSeparator()
+        self._act_theme = QAction(
+            tr("menu.view.dark_theme") if current_theme == "light" else tr("menu.view.light_theme"),
+            self
+        )
+        self._act_theme.triggered.connect(self._toggle_theme)
+        self._view_menu.addAction(self._act_theme)
+
+        self._ref_menu = mb.addMenu(tr("menu.help"))
+        self._act_handbook = QAction(tr("menu.help.handbook"), self)
+        self._act_handbook.triggered.connect(self._open_handbook)
+        self._ref_menu.addAction(self._act_handbook)
+
+        self._about_menu = mb.addMenu(tr("menu.help.about"))
+        self._act_about = QAction(tr("menu.help.about_zametka"), self)
+        self._act_about.triggered.connect(self._show_about)
+        self._about_menu.addAction(self._act_about)
+        self._about_menu.addSeparator()
+        self._act_update = QAction(tr("menu.help.check_updates"), self)
+        self._act_update.triggered.connect(self._check_updates)
+        self._about_menu.addAction(self._act_update)
 
     def _show_about(self):
         from PyQt6.QtWidgets import QMessageBox
         from zametka_dbs.core.version import __version__, __repo__
-        QMessageBox.about(self, "О Zametka",
-            "Zametka — заметки с Rust-ядром\n\n"
-            f"Версия: {__version__}\n"
-            f"GitHub: {__repo__}\n"
-            "Движок: zametka_core (Rust)\n"
-            "UI: PyQt6"
+        engine = "zametka_core (Rust)" if HAS_RUST else "markdown-it-py (Python)"
+        QMessageBox.about(self, tr("about.title"),
+            tr("about.text", version=__version__, repo=__repo__, engine=engine)
         )
 
     def _check_updates(self):
@@ -1130,41 +1202,42 @@ class MainWindow(QMainWindow):
 
     def _show_vault_menu(self):
         menu = QMenu(self)
+        config = get_config()
+        current_theme = config.get("theme", "dark")
 
-        act_open_file = QAction("Открыть файл", self)
+        act_open_file = QAction(tr("vault_menu.open_file"), self)
         act_open_file.triggered.connect(self._open_file_dialog)
         menu.addAction(act_open_file)
 
-        act_create_file = QAction("Создать файл", self)
+        act_create_file = QAction(tr("vault_menu.create_file"), self)
         act_create_file.triggered.connect(self._new_note)
         menu.addAction(act_create_file)
 
         menu.addSeparator()
 
-        act_open_folder = QAction("Открыть папку", self)
+        act_open_folder = QAction(tr("vault_menu.open_folder"), self)
         act_open_folder.triggered.connect(self._open_vault_dialog)
         menu.addAction(act_open_folder)
 
-        act_close_folder = QAction("Закрыть папку", self)
+        act_close_folder = QAction(tr("vault_menu.close_folder"), self)
         act_close_folder.triggered.connect(self._close_current_vault)
         menu.addAction(act_close_folder)
 
         menu.addSeparator()
 
-        act_save = QAction("Сохранить", self)
+        act_save = QAction(tr("vault_menu.save"), self)
         act_save.triggered.connect(self._save_current_file)
         menu.addAction(act_save)
 
-        act_save_as = QAction("Сохранить как...", self)
+        act_save_as = QAction(tr("vault_menu.save_as"), self)
         act_save_as.triggered.connect(self._save_as)
         menu.addAction(act_save_as)
 
         menu.addSeparator()
 
-        config = get_config()
-        current_theme = config.get("theme", "dark")
         act_toggle_theme = QAction(
-            "Светлая тема" if current_theme == "dark" else "Тёмная тема", self
+            tr("vault_menu.dark_theme") if current_theme == "light" else tr("vault_menu.light_theme"),
+            self
         )
         act_toggle_theme.triggered.connect(self._toggle_theme)
         menu.addAction(act_toggle_theme)

@@ -32,7 +32,8 @@ class NoteWindow(QMainWindow):
         self.setMinimumSize(700, 500)
         self.resize(950, 650)
 
-        # set in _update_styles
+        from zametka_dbs.core.config import get_config
+        self._dark = get_config().get("theme", "dark") == "dark"
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -44,6 +45,7 @@ class NoteWindow(QMainWindow):
         self._setup_content(layout, filepath)
         self._load_file(filepath)
         self._update_styles()
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
 
     def _on_theme_changed(self, theme: str, **kwargs):
         self._dark = theme == 'dark'

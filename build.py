@@ -26,7 +26,10 @@ def step(msg):
 
 def run(cmd, cwd=None):
     print(f"  $ {cmd}")
-    result = subprocess.run(cmd, shell=True, cwd=cwd or str(ROOT))
+    if isinstance(cmd, list):
+        result = subprocess.run(cmd, cwd=cwd or str(ROOT))
+    else:
+        result = subprocess.run(cmd, shell=False, cwd=cwd or str(ROOT))
     if result.returncode != 0:
         print(f"  FAILED with code {result.returncode}")
         sys.exit(result.returncode)
@@ -38,11 +41,13 @@ def main():
 
     step("1. Build Rust core (zametka_core + zametka_conpty)")
     run(
-        f'"{VENV_PYTHON}" -m maturin develop --release --manifest-path zametka-core\\Cargo.toml',
+        [str(VENV_PYTHON), "-m", "maturin", "develop", "--release", 
+         "--manifest-path", str(ROOT / "zametka-core" / "Cargo.toml")],
         cwd=str(ROOT),
     )
     run(
-        f'"{VENV_PYTHON}" -m maturin develop --release --manifest-path zametka-conpty\\Cargo.toml',
+        [str(VENV_PYTHON), "-m", "maturin", "develop", "--release",
+         "--manifest-path", str(ROOT / "zametka-conpty" / "Cargo.toml")],
         cwd=str(ROOT),
     )
 
@@ -52,7 +57,7 @@ def main():
         args.append("--debug")
         args.append("--console")
     run(
-        f'"{VENV_PYTHON}" -m PyInstaller Zametka.spec {" ".join(args)}',
+        [str(VENV_PYTHON), "-m", "PyInstaller", str(ROOT / "Zametka.spec")] + args,
         cwd=str(ROOT),
     )
 
@@ -67,8 +72,12 @@ def main():
     if build_installer:
         step("3. Build installer .exe")
         run(
-            f'"{VENV_PYTHON}" -m PyInstaller installer/installer.py --onefile --windowed '
-            f'--icon=assets/app_icon.ico --name Zametka-Installer --distpath dist',
+            [str(VENV_PYTHON), "-m", "PyInstaller",
+             str(ROOT / "installer" / "installer.py"),
+             "--onefile", "--windowed",
+             "--icon=" + str(ROOT / "assets" / "app_icon.ico"),
+             "--name", "Zametka-Installer",
+             "--distpath", "dist"],
             cwd=str(ROOT),
         )
         inst_path = ROOT / "dist" / "Zametka-Installer.exe"

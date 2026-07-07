@@ -311,6 +311,14 @@ def the_stylesheet(theme: str = "dark") -> str:
             background: {v["bg0"]};
             border: none;
         }}
+        QWidget#card-container {{
+            background-color: {v["bg1"]};
+        }}
+        QFrame#note-card {{
+            background-color: {v["bg2"]};
+            border: 1px solid {v["border2"]};
+            border-radius: 4px;
+        }}
         QWidget#backlinks-panel {{
             background-color: {v["bg0"]};
             border-top: 1px solid {v["border"]};

@@ -3,12 +3,9 @@ import re
 
 logger = logging.getLogger(__name__)
 
-try:
-    from zametka_core import render_markdown as _rust_render
-    from zametka_core import resolve_wikilinks as _rust_resolve_wikilinks
-    _HAS_RUST = True
-except ImportError:
-    _HAS_RUST = False
+from zametka_dbs.core.rust_bridge import HAS_RUST
+from zametka_dbs.core.rust_bridge import rust_render_markdown as _rust_render
+from zametka_dbs.core.rust_bridge import rust_resolve_wikilinks as _rust_resolve_wikilinks
 
 from zametka_dbs.preview.styles import _preview_css, empty_preview, process_tags, process_callouts
 
@@ -34,7 +31,7 @@ def render_markdown(text: str, note_map: dict | None = None, dark: bool = True) 
     css = _preview_css(dark)
     if not text:
         return empty_preview(dark)
-    if _HAS_RUST:
+    if HAS_RUST:
         html = _rust_render(text)
     else:
         from markdown_it import MarkdownIt
@@ -43,7 +40,7 @@ def render_markdown(text: str, note_map: dict | None = None, dark: bool = True) 
     html = process_tags(html)
     html = process_callouts(html)
     if note_map:
-        if _HAS_RUST:
+        if HAS_RUST:
             html = _rust_resolve_wikilinks(html, note_map)
         else:
             html = _py_resolve_wikilinks(html, note_map)

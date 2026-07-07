@@ -7,11 +7,31 @@ logger = logging.getLogger(__name__)
 
 CONFIG_VERSION = 1
 
-try:
-    from zametka_core import Config as RustConfig
-    _HAS_RUST = True
-except ImportError:
-    _HAS_RUST = False
+_DEFAULTS = {
+    "vault_path": "",
+    "theme": "dark",
+    "language": "ru",
+    "editor": {
+        "font_family": "Cascadia Code, JetBrains Mono, Consolas",
+        "font_size": 14,
+        "tab_size": 4,
+        "word_wrap": True,
+        "show_line_numbers": True,
+    },
+    "ui": {
+        "sidebar_width": 300,
+        "preview_width_ratio": 0.45,
+    },
+    "preview": {
+        "enabled": True,
+        "auto_render": True,
+    },
+    "pinned": {
+        "items": [],
+    },
+}
+
+from zametka_dbs.core.rust_bridge import HAS_RUST, RustConfig
 
 
 class _PyConfig:
@@ -22,6 +42,19 @@ class _PyConfig:
         self._data = {}
         self._load()
 
+    @staticmethod
+    def _merge_defaults(data: dict) -> dict:
+        result = {}
+        for k, v in _DEFAULTS.items():
+            if isinstance(v, dict):
+                result[k] = {**v, **(data.get(k, {}))}
+            else:
+                result[k] = data.get(k, v)
+        for k, v in data.items():
+            if k not in _DEFAULTS:
+                result[k] = v
+        return result
+
     def _load(self):
         if os.path.isfile(self._path):
             try:
@@ -30,6 +63,9 @@ class _PyConfig:
             except Exception as e:
                 logger.warning(f"Failed to load config: {e}")
                 self._data = {}
+        else:
+            self._data = {}
+        self._data = self._merge_defaults(self._data)
         self._migrate()
 
     def _migrate(self):
@@ -83,72 +119,25 @@ class _PyConfig:
 
 class Config:
     def __init__(self, config_dir=None):
-        if _HAS_RUST:
+        if HAS_RUST:
             self._inner = RustConfig(config_dir)
         else:
             logger.info("Using Python config backend")
             self._inner = _PyConfig(config_dir)
 
     def get(self, key, default=None):
-        if _HAS_RUST:
-            val = self._inner.get(key, None)
-            if val == "" and default is not None:
+        if HAS_RUST:
+            val = self._inner.get(key)
+            if val is None:
                 return default
-            keys = key.split(".")
-            last = keys[-1]
-            if last in ("enabled", "word_wrap", "show_line_numbers", "auto_render"):
-                if val == "":
-                    return default if default is not None else False
-                return val.lower() == "true"
-            if last in ("font_size", "tab_size", "sidebar_width", "max_results"):
-                if val == "":
-                    return default if default is not None else 0
-                try:
-                    return int(float(val))
-                except ValueError:
-                    return default
-            if last in ("preview_width_ratio", "line_height"):
-                if val == "":
-                    return default if default is not None else 0.0
-                try:
-                    return float(val)
-                except ValueError:
-                    return default
-            if isinstance(default, list):
-                if val and val.startswith("["):
-                    try:
-                        return json.loads(val)
-                    except json.JSONDecodeError:
-                        pass
-                return default if default is not None else []
-            return val if val != "" else (default if default is not None else "")
+            return val
         val = self._inner.get(key, None)
         if val is None:
             return default
-        keys = key.split(".")
-        last = keys[-1]
-        if last in ("enabled", "word_wrap", "show_line_numbers", "auto_render"):
-            return bool(val) if isinstance(val, bool) else str(val).lower() == "true"
-        if last in ("font_size", "tab_size", "sidebar_width", "max_results"):
-            try:
-                return int(val)
-            except (ValueError, TypeError):
-                return default
-        if last in ("preview_width_ratio", "line_height"):
-            try:
-                return float(val)
-            except (ValueError, TypeError):
-                return default
         return val
 
     def set(self, key, value):
-        if _HAS_RUST:
-            if isinstance(value, (list, dict)):
-                self._inner.set(key, json.dumps(value, ensure_ascii=False))
-            else:
-                self._inner.set(key, str(value))
-        else:
-            self._inner.set(key, value)
+        self._inner.set(key, value)
 
 
 _config_instance = None

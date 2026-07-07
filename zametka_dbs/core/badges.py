@@ -410,7 +410,15 @@ def detect_file_badges(filepath: str) -> list[dict]:
 def get_assigned_badges(filepath: str) -> list[dict]:
     from zametka_dbs.core.config import get_config
     config = get_config()
-    assigned: list[str] = config.get(f"badges.{filepath}", [])
+    assigned = config.get(f"badges.{filepath}", [])
+    if isinstance(assigned, str):
+        import json
+        try:
+            assigned = json.loads(assigned)
+        except (json.JSONDecodeError, TypeError):
+            assigned = []
+    if not isinstance(assigned, list):
+        assigned = []
     result = []
     for label in assigned:
         for b in ALL_BADGES:
@@ -440,17 +448,29 @@ def remove_assigned_badge(filepath: str, label: str):
     set_assigned_badges(filepath, current)
 
 
+def _ensure_notes_list(notes) -> list[str]:
+    if isinstance(notes, str):
+        import json
+        try:
+            return json.loads(notes)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if isinstance(notes, list):
+        return notes
+    return []
+
+
 def get_notes_list() -> list[str]:
     from zametka_dbs.core.config import get_config
     config = get_config()
-    notes: list[str] = config.get("notes.items", [])
+    notes = _ensure_notes_list(config.get("notes.items", []))
     return [n for n in notes if os.path.exists(n)]
 
 
 def add_note(filepath: str):
     from zametka_dbs.core.config import get_config
     config = get_config()
-    notes: list[str] = config.get("notes.items", [])
+    notes = _ensure_notes_list(config.get("notes.items", []))
     if filepath not in notes:
         notes.append(filepath)
         config.set("notes.items", notes)
@@ -459,7 +479,7 @@ def add_note(filepath: str):
 def remove_note(filepath: str):
     from zametka_dbs.core.config import get_config
     config = get_config()
-    notes: list[str] = config.get("notes.items", [])
+    notes = _ensure_notes_list(config.get("notes.items", []))
     if filepath in notes:
         notes.remove(filepath)
         config.set("notes.items", notes)

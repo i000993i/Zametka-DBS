@@ -11,6 +11,8 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF
 
 from assets.icons import icon
 from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.core.config import get_config
+from zametka_dbs.core.i18n import tr
 from zametka_dbs.ui.styles import _THEME_VARS
 from zametka_dbs.core.badges import (
     BADGE_CATEGORIES, get_notes_list, add_note, remove_note,
@@ -48,7 +50,7 @@ class _BadgeItemWidget(QWidget):
 class _BadgeSelectDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Add Badge")
+        self.setWindowTitle(tr("notes.dialog.add_badge_title"))
         self.setMinimumSize(420, 480)
         self.resize(480, 560)
         _current_theme = get_config().get("theme", "dark")
@@ -57,7 +59,7 @@ class _BadgeSelectDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search badges by name or category...")
+        self._search.setPlaceholderText(tr("notes.search_badges_placeholder"))
         self._search.textChanged.connect(self._filter)
         self._search.setStyleSheet(
             f"background: {_v['bg2']}; border: 1px solid {_v['border']}; "
@@ -127,7 +129,6 @@ class _NoteCard(QFrame):
         self._filepath = filepath
         self.setObjectName("note-card")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._dark = True
         self._update_card_style()
 
         layout = QVBoxLayout(self)
@@ -180,6 +181,16 @@ class _NoteCard(QFrame):
             row2.addStretch()
             layout.addLayout(row2)
 
+    def _update_card_style(self):
+        from zametka_dbs.core.config import get_config
+        self._dark = get_config().get("theme", "dark") == "dark"
+        _v = _THEME_VARS["dark" if self._dark else "light"]
+        self.setStyleSheet(
+            f"background-color: {_v['bg2']}; "
+            f"border: 1px solid {_v['border2']}; "
+            f"border-radius: 4px;"
+        )
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._filepath)
@@ -211,27 +222,24 @@ class NotesBrowser(QWidget):
         header_icon.setFixedWidth(16)
         header_layout.addWidget(header_icon)
 
-        header_label = QLabel("NOTES")
+        header_label = QLabel(tr("notes.header"))
         header_label.setObjectName("notes-label")
         header_layout.addWidget(header_label)
 
         header_layout.addStretch()
 
-        self._add_file_btn = QPushButton(icon("file"), " Add")
+        self._add_file_btn = QPushButton(icon("file"), tr("notes.add_btn"))
         self._add_file_btn.setObjectName("notes-add-btn")
         self._add_file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._add_file_btn.setToolTip("Add file to Notes")
+        self._add_file_btn.setToolTip(tr("notes.add_tooltip"))
         self._add_file_btn.clicked.connect(self._add_file_dialog)
         header_layout.addWidget(self._add_file_btn)
-
-
 
         layout.addWidget(header)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setObjectName("notes-scroll")
-
 
         self._card_container = QWidget()
         self._card_container.setObjectName("card-container")
@@ -247,7 +255,7 @@ class NotesBrowser(QWidget):
 
     def _add_file_dialog(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Add note", "", "All Files (*.*)"
+            self, tr("notes.dialog.add_title"), "", tr("notes.dialog.add_filter")
         )
         if path:
             add_note(path)
@@ -260,7 +268,7 @@ class NotesBrowser(QWidget):
                 item.widget().deleteLater()
         notes = get_notes_list()
         if not notes:
-            empty = QLabel("No notes yet.\nClick + to add files.")
+            empty = QLabel(tr("notes.empty"))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             _v = _THEME_VARS["dark" if getattr(self, "_dark", True) else "light"]
             empty.setStyleSheet(f"color: {_v['fg2']}; font-size: 11px; padding: 20px; background: transparent;")
@@ -281,11 +289,11 @@ class NotesBrowser(QWidget):
     def _show_card_menu(self, pos, filepath: str):
         menu = QMenu(self)
 
-        act_add_badge = QAction("Add badge...", self)
+        act_add_badge = QAction(tr("notes.context.add_badge"), self)
         act_add_badge.triggered.connect(lambda: self._add_badge_dialog(filepath))
         menu.addAction(act_add_badge)
 
-        act_remove_badge = QMenu("Remove badge", self)
+        act_remove_badge = QMenu(tr("notes.context.remove_badge"), self)
         assigned = get_assigned_badges(filepath)
         if assigned:
             for b in assigned:
@@ -298,7 +306,7 @@ class NotesBrowser(QWidget):
 
         menu.addSeparator()
 
-        act_remove = QAction("Remove from Notes", self)
+        act_remove = QAction(tr("notes.context.remove_from_notes"), self)
         act_remove.triggered.connect(lambda: self._remove_note(filepath))
         menu.addAction(act_remove)
 

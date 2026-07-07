@@ -8,7 +8,13 @@ _ICON_DIR = os.path.join(os.path.dirname(__file__), "svg")
 _SIZES = (16, 24, 32, 48, 64)
 
 
+_ICON_CACHE: dict[str, QIcon] = {}
+
 def icon(name, color="#666666", hover_color="#333333", size=None):
+    key = (name, color, hover_color, size)
+    cached = _ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
     path = os.path.join(_ICON_DIR, f"{name}.svg")
     if not os.path.isfile(path):
         return QIcon()
@@ -28,6 +34,7 @@ def icon(name, color="#666666", hover_color="#333333", size=None):
                 _svg_to_pixmap(raw.replace("currentColor", hover_color), s),
                 mode=mode,
             )
+    _ICON_CACHE[key] = result
     return result
 
 

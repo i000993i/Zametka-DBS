@@ -5,16 +5,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-try:
-    from zametka_core import extract_wikilinks as _rust_extract
-    from zametka_core import find_markdown_files as _rust_find_md
-    from zametka_core import build_backlinks as _rust_build_backlinks
-    _HAS_RUST = True
-except ImportError:
-    _HAS_RUST = False
+from zametka_dbs.core.rust_bridge import HAS_RUST
+from zametka_dbs.core.rust_bridge import rust_extract_wikilinks as _rust_extract
+from zametka_dbs.core.rust_bridge import rust_find_markdown_files as _rust_find_md
+from zametka_dbs.core.rust_bridge import rust_build_backlinks as _rust_build_backlinks
 
 
-_WIKILINK_RE = re.compile(r"\[\[([^\]]+?)\]\]")
+_WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 
 
 def _py_extract_wikilinks(text):
@@ -51,7 +48,7 @@ def _py_build_backlinks(note_map):
 
 
 def parse_wikilinks(text):
-    if _HAS_RUST:
+    if HAS_RUST:
         targets = _rust_extract(text)
     else:
         targets = _py_extract_wikilinks(text)
@@ -81,7 +78,7 @@ class LinkResolver:
         self._file_index.clear()
         if not self._vault_path or not os.path.isdir(self._vault_path):
             return
-        if _HAS_RUST:
+        if HAS_RUST:
             self._file_index = _rust_find_md(self._vault_path)
         else:
             self._file_index = _py_find_markdown_files(self._vault_path)
@@ -150,7 +147,7 @@ class BacklinkIndex:
         if self._resolver and self._resolver._file_index:
             note_map = dict(self._resolver._file_index)
             try:
-                if _HAS_RUST:
+                if HAS_RUST:
                     raw = _rust_build_backlinks(note_map)
                 else:
                     raw = _py_build_backlinks(note_map)

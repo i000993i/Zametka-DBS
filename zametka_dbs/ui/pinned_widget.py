@@ -10,11 +10,9 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from assets.icons import icon
 from zametka_dbs.core.config import get_config
 
-try:
-    from zametka_core import detect_language as _rust_detect, scan_folder_languages as _rust_scan
-    _HAS_CORE = True
-except ImportError:
-    _HAS_CORE = False
+from zametka_dbs.core.rust_bridge import HAS_RUST
+from zametka_dbs.core.rust_bridge import rust_detect_language as _rust_detect
+from zametka_dbs.core.rust_bridge import rust_scan_folder_languages as _rust_scan
 
 _LANG_MAP = {
     ".py": ("Python", "#9d7cd8"), ".pyw": ("Python", "#9d7cd8"),
@@ -73,13 +71,13 @@ def _scan_folder_languages_py(folder_path: str, max_depth: int = 2):
 
 
 def _detect_folder_languages(folder_path: str, max_depth: int = 2):
-    if _HAS_CORE:
+    if HAS_RUST:
         return _rust_scan(folder_path, max_depth)
     return _scan_folder_languages_py(folder_path, max_depth)
 
 
 def _detect_language(filepath: str):
-    if _HAS_CORE:
+    if HAS_RUST:
         return _rust_detect(filepath)
     return _detect_language_py(filepath)
 
@@ -167,9 +165,19 @@ class PinnedWidget(QWidget):
         if folder:
             self._add_pin(folder)
 
+    @staticmethod
+    def _ensure_list(val):
+        if isinstance(val, str):
+            import json
+            try:
+                return json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return val if isinstance(val, list) else []
+
     def _add_pin(self, path: str):
         config = get_config()
-        pinned = config.get("pinned.items", [])
+        pinned = self._ensure_list(config.get("pinned.items", []))
         if path not in pinned:
             pinned.append(path)
             config.set("pinned.items", pinned)
@@ -177,7 +185,7 @@ class PinnedWidget(QWidget):
 
     def _remove_pin(self, path: str):
         config = get_config()
-        pinned = config.get("pinned.items", [])
+        pinned = self._ensure_list(config.get("pinned.items", []))
         if path in pinned:
             pinned.remove(path)
             config.set("pinned.items", pinned)
@@ -186,7 +194,7 @@ class PinnedWidget(QWidget):
     def _load_pins(self):
         self._list.clear()
         config = get_config()
-        pinned = config.get("pinned.items", [])
+        pinned = self._ensure_list(config.get("pinned.items", []))
         has_items = False
         max_items = 20
         shown = 0
@@ -317,7 +325,7 @@ class PinnedWidget(QWidget):
 
     def _clean_missing(self):
         config = get_config()
-        pinned = config.get("pinned.items", [])
+        pinned = self._ensure_list(config.get("pinned.items", []))
         pinned = [p for p in pinned if os.path.exists(p)]
         config.set("pinned.items", pinned)
         self._load_pins()

@@ -7,6 +7,7 @@ from PyQt6.QtGui import QFont, QColor
 
 from assets.icons import icon
 from zametka_dbs.search.engine import SearchEngine
+from zametka_dbs.core.i18n import tr
 
 
 class SearchWidget(QWidget):
@@ -43,7 +44,7 @@ class SearchWidget(QWidget):
         hdr_icon.setPixmap(icon("search").pixmap(12, 12))
         hdr_icon.setFixedWidth(16)
         hdr_layout.addWidget(hdr_icon)
-        hdr_text = QLabel("Search")
+        hdr_text = QLabel(tr("search.header"))
         hdr_text.setObjectName("search-header-label")
         hdr_layout.addWidget(hdr_text)
         hdr_layout.addStretch()
@@ -52,7 +53,7 @@ class SearchWidget(QWidget):
         # Search input
         self._input = QLineEdit()
         self._input.setObjectName("search-input")
-        self._input.setPlaceholderText("Search notes...")
+        self._input.setPlaceholderText(tr("search.placeholder"))
         self._input.setClearButtonEnabled(True)
         layout.addWidget(self._input)
 
@@ -65,10 +66,10 @@ class SearchWidget(QWidget):
 
         self._replace_input = QLineEdit()
         self._replace_input.setObjectName("replace-input")
-        self._replace_input.setPlaceholderText("Replace with...")
+        self._replace_input.setPlaceholderText(tr("search.replace_placeholder"))
         replace_layout.addWidget(self._replace_input, 1)
 
-        self._replace_btn = QPushButton("Replace All")
+        self._replace_btn = QPushButton(tr("search.replace_all"))
         self._replace_btn.setObjectName("replace-btn")
         self._replace_btn.setFixedHeight(24)
         self._replace_btn.setCursor(Qt.CursorShape.PointingHandCursor)

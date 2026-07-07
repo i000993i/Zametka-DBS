@@ -20,13 +20,8 @@ from assets.icons import icon
 from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.ui.styles import _THEME_VARS
 
-from zametka_conpty import ConPtyProcess
-
-try:
-    from zametka_conpty import parse_ansi as _rust_parse_ansi
-    _HAS_RUST_ANSI = True
-except ImportError:
-    _HAS_RUST_ANSI = False
+from zametka_dbs.core.rust_bridge import HAS_CONPTY, ConPtyProcess
+from zametka_dbs.core.rust_bridge import rust_parse_ansi as _rust_parse_ansi
 
 logger = logging.getLogger(__name__)
 
@@ -487,7 +482,7 @@ class _TerminalSession(QWidget):
         self.output.ensureCursorVisible()
 
     def _insert_ansi(self, cursor: QTextCursor, text: str):
-        if _HAS_RUST_ANSI:
+        if HAS_CONPTY:
             # Handle J/K manually (cursor ops not suitable for Rust)
             jk_actions: list[tuple[str, str]] = []
             i = 0

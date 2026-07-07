@@ -19,7 +19,7 @@ def test_parse_wikilinks():
 
 def test_py_extract_wikilinks():
     result = _py_extract_wikilinks("[[File]] and [[Another File|alias]]")
-    assert result == ["File", "Another File|alias"]
+    assert result == ["File", "Another File"]
 
 
 def test_no_wikilinks():

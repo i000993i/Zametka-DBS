@@ -32,6 +32,10 @@ class ActivityBar(QFrame):
         for i, btn in enumerate(self._buttons):
             btn.setChecked(i == index)
 
+    def set_button_tooltip(self, index: int, tooltip: str):
+        if 0 <= index < len(self._buttons):
+            self._buttons[index].setToolTip(tooltip)
+
     def select(self, button: QPushButton):
         for b in self._buttons:
             b.setChecked(b is button)

@@ -3,17 +3,25 @@ import subprocess
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QSpinBox, QSlider, QComboBox, QSizePolicy,
+    QScrollArea, QSpinBox, QSlider, QComboBox, QSizePolicy, QMenu,
+    QApplication,
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QColor
+from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QColor, QAction
 
 from assets.icons import icon
 
-try:
-    import fitz
-except ImportError:
-    fitz = None
+_FITZ = None
+
+def _get_fitz():
+    global _FITZ
+    if _FITZ is None:
+        try:
+            import fitz as _fitz_mod
+            _FITZ = _fitz_mod
+        except ImportError:
+            _FITZ = False
+    return _FITZ if _FITZ else None
 
 
 ZOOM_PRESETS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
@@ -27,7 +35,6 @@ DBS_RENDERER = os.path.join(
     "dbs-renderer", "target", "release", "dbs-renderer.exe",
 )
 
-# Formats supported by MuPDF
 VIEWER_EXTS = {
     ".pdf", ".xps", ".epub", ".cbz", ".cbr", ".fb2", ".txt",
 }
@@ -89,6 +96,13 @@ class DocumentViewer(QWidget):
         self._page_count_label = QLabel("of 1")
         self._page_count_label.setObjectName("pdf-page-count")
         tbar.addWidget(self._page_count_label)
+
+        self._copy_btn = QPushButton("Copy")
+        self._copy_btn.setObjectName("pdf-copy-btn")
+        self._copy_btn.setFixedHeight(24)
+        self._copy_btn.setToolTip("Copy page text")
+        self._copy_btn.clicked.connect(lambda: self._copy_page_text(self._current_page))
+        tbar.addWidget(self._copy_btn)
 
         tbar.addStretch()
 
@@ -153,16 +167,18 @@ class DocumentViewer(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._scroll.setStyleSheet("QScrollArea { background-color: #e8e8e8; border: none; }")
 
         self._container = QWidget()
         self._container.setObjectName("pdf-container")
+        self._container.setStyleSheet("background-color: #e8e8e8;")
         self._page_layout = QVBoxLayout(self._container)
         self._page_layout.setContentsMargins(20, 10, 20, 10)
         self._page_layout.setSpacing(12)
         self._page_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._no_doc_label = QLabel(
-            "Document viewer not available (install PyMuPDF)" if fitz is None
+            "Document viewer not available (install PyMuPDF)" if _get_fitz() is None
             else "Open a PDF or document file"
         )
         self._no_doc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -217,7 +233,7 @@ class DocumentViewer(QWidget):
             super().keyPressEvent(event)
 
     def load(self, filepath: str):
-        if fitz is None:
+        if _get_fitz() is None:
             self._show_error("PyMuPDF not installed")
             return
         if not os.path.isfile(filepath):
@@ -239,7 +255,7 @@ class DocumentViewer(QWidget):
         self._clear_pages()
 
         try:
-            self._doc = fitz.open(filepath)
+            self._doc = _get_fitz().open(filepath)
             self._page_count = self._doc.page_count
             self._page_rects = [self._doc[i].rect for i in range(self._page_count)]
             self._loaded = True
@@ -295,7 +311,7 @@ class DocumentViewer(QWidget):
         self._page_spinner.blockSignals(False)
 
         for i in range(self._page_count):
-            pw = _PageWidget(i + 1)
+            pw = _PageWidget(i + 1, doc_viewer=self)
             self._page_layout.addWidget(pw, 0, Qt.AlignmentFlag.AlignCenter)
             self._page_widgets.append(pw)
 
@@ -371,7 +387,7 @@ class DocumentViewer(QWidget):
 
         for attempt in (1.0, 0.5, 0.25):
             try:
-                mat2 = fitz.Matrix(zoom * attempt, zoom * attempt)
+                mat2 = _get_fitz().Matrix(zoom * attempt, zoom * attempt)
                 pix = self._doc[idx].get_pixmap(matrix=mat2)
                 if pix is None or pix.samples is None or len(pix.samples) == 0:
                     continue
@@ -393,6 +409,32 @@ class DocumentViewer(QWidget):
 
         self._error_pages[idx] = "render error"
         self._update_widget(idx)
+
+    def _copy_page_text(self, idx: int):
+        if self._doc is None:
+            return
+        try:
+            text = self._doc[idx].get_text("text")
+            if text:
+                QApplication.clipboard().setText(text)
+                self._page_widgets[idx]._page_label.setText("Page text copied")
+                QTimer.singleShot(2000, lambda i=idx: self._page_widgets[i]._page_label.setText(f"Page {i + 1}"))
+        except Exception:
+            pass
+
+    def _copy_all_text(self):
+        if self._doc is None or self._page_count == 0:
+            return
+        try:
+            parts = []
+            for i in range(self._page_count):
+                text = self._doc[i].get_text("text")
+                if text:
+                    parts.append(f"--- Page {i + 1} ---\n{text}")
+            if parts:
+                QApplication.clipboard().setText("\n\n".join(parts))
+        except Exception:
+            pass
 
     def _get_visible_range(self) -> tuple[int, int]:
         if not self._page_widgets:
@@ -575,24 +617,52 @@ class DocumentViewer(QWidget):
 
 
 class _PageWidget(QWidget):
-    def __init__(self, page_num: int, parent=None):
+    def __init__(self, page_num: int, doc_viewer=None, parent=None):
         super().__init__(parent)
+        self._page_num = page_num
+        self._doc_viewer = doc_viewer
         self.setObjectName("pdf-page-widget")
+        self.setStyleSheet(
+            "background-color: white;"
+        )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
         self._label = QLabel()
+        self._label.setObjectName("pdf-page-label")
         self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.setCursor(Qt.CursorShape.OpenHandCursor)
         self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._label.setMinimumSize(QSize(100, 40))
+        self._label.setStyleSheet("background-color: white;")
+        self._label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._label.customContextMenuRequested.connect(self._show_context_menu)
         layout.addWidget(self._label)
 
         self._page_label = QLabel(f"Page {page_num}")
         self._page_label.setObjectName("pdf-page-number")
         self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._page_label.setStyleSheet("background: transparent; color: #666;")
         layout.addWidget(self._page_label)
+
+    def _show_context_menu(self, pos):
+        menu = QMenu(self._label)
+        act_copy = QAction("Copy page text", self._label)
+        act_copy.triggered.connect(self._copy_text)
+        menu.addAction(act_copy)
+        act_copy_all = QAction("Copy all text", self._label)
+        act_copy_all.triggered.connect(self._copy_all_text)
+        menu.addAction(act_copy_all)
+        menu.exec(self._label.mapToGlobal(pos))
+
+    def _copy_text(self):
+        if self._doc_viewer:
+            self._doc_viewer._copy_page_text(self._page_num - 1)
+
+    def _copy_all_text(self):
+        if self._doc_viewer:
+            self._doc_viewer._copy_all_text()
 
     def set_pixmap(self, pix: QPixmap):
         self._label.setText("")

@@ -6,11 +6,7 @@ from collections import Counter
 
 logger = logging.getLogger(__name__)
 
-try:
-    from zametka_core import SearchIndex as _RustSearchIndex
-    _HAS_RUST = True
-except ImportError:
-    _HAS_RUST = False
+from zametka_dbs.core.rust_bridge import HAS_RUST, RustSearchIndex as _RustSearchIndex
 
 
 class SearchResult:
@@ -96,7 +92,7 @@ class _PySearchIndex:
 
 class SearchEngine:
     def __init__(self):
-        if _HAS_RUST:
+        if HAS_RUST:
             self._index = _RustSearchIndex()
         else:
             logger.info("Using Python search backend")
@@ -111,7 +107,7 @@ class SearchEngine:
         self._index.clear()
         self._titles.clear()
         try:
-            if _HAS_RUST:
+            if HAS_RUST:
                 count = self._index.index_vault(vault_path)
             else:
                 count = self._index.index_vault(vault_path)

@@ -1468,7 +1468,11 @@ class MainWindow(QMainWindow):
         count = self.editor.word_count()
         self.status_words.setText(f"Words: {count}")
         self._update_wikilink_completer()
-        self.preview.update_content(self.editor.toPlainText())
+        ext = os.path.splitext(self._current_file)[1].lower() if self._current_file else ""
+        if ext in (".md", ".markdown", ".mdown", ".mdx"):
+            self.preview.update_content(self.editor.toPlainText())
+        else:
+            self.preview._browser.setHtml("<html><body style='color:#888;font-family:sans-serif;padding:2em'><p>Preview only available for Markdown files.</p></body></html>")
         if self._current_file:
             self.status_saved.setText("Unsaved")
             if self._current_file in self._tab_state:

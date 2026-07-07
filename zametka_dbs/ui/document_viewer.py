@@ -36,7 +36,7 @@ DBS_RENDERER = os.path.join(
 )
 
 VIEWER_EXTS = {
-    ".pdf", ".xps", ".epub", ".cbz", ".cbr", ".fb2", ".txt",
+    ".pdf", ".xps", ".epub", ".cbz", ".cbr", ".fb2",
 }
 
 

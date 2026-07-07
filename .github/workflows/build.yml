@@ -42,7 +42,7 @@ jobs:
 
       - name: Create release zip
         run: |
-          Compress-Archive -Path dist/Zametka/* -DestinationPath Zametka-Latest.zip -Force
+          Compress-Archive -Path dist/Zametka/*,dist/Zametka.exe -DestinationPath Zametka-Latest.zip -Force
 
       - name: Generate SHA256
         run: |

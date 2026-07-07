@@ -108,7 +108,7 @@ class LineGutter(QWidget):
                 n = block.blockNumber()
                 typ = self._line_types.get(n, "normal")
                 active = n == self._current_line
-                draw_y = max(visible_top, top)
+                draw_y = top
 
                 if active:
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])

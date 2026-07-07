@@ -496,7 +496,20 @@ class _TerminalSession(QWidget):
     def _print(self, text: str):
         cursor = self.output.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = text.replace("\r\n", "\n")
+        if "\r" in text:
+            parts = text.split("\r")
+            text = ""
+            for part in parts:
+                if not part:
+                    continue
+                cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+                cursor.movePosition(QTextCursor.MoveOperation.EndOfLine, QTextCursor.MoveMode.KeepAnchor)
+                cursor.removeSelectedText()
+                self._insert_ansi(cursor, part)
+            self.output.setTextCursor(cursor)
+            self.output.ensureCursorVisible()
+            return
         self._insert_ansi(cursor, text)
         self.output.setTextCursor(cursor)
         self.output.ensureCursorVisible()

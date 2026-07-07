@@ -97,13 +97,6 @@ class InstallThread(QThread):
                 for i, name in enumerate(files):
                     zf.extract(name, str(target))
                     self.progress.emit(int((i + 1) * 100 / len(files)))
-            exe_src = target / "Zametka" / "Zametka.exe"
-            if exe_src.exists():
-                shutil.move(str(exe_src), str(target / "Zametka.exe"))
-                internal = target / "Zametka" / "_internal"
-                if internal.exists():
-                    shutil.move(str(internal), str(target / "_internal"))
-                (target / "Zametka").rmdir()
             exe_path = target / "Zametka.exe"
             if not exe_path.exists():
                 for f in target.rglob("*.exe"):

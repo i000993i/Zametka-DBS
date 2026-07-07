@@ -2,7 +2,7 @@
 ; Build with Inno Setup Compiler (https://jrsoftware.org/isinfo.php)
 
 #define MyAppName "Zametka"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.1"
 #define MyAppPublisher "Zametka Team"
 #define MyAppURL "https://github.com/i000993i/Zametka-DBS"
 #define MyAppExeName "Zametka.exe"

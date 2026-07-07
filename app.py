@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+import traceback
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
@@ -22,6 +23,43 @@ def setup_logging():
     logging.getLogger("zametka_dbs.search.engine").setLevel(logging.INFO)
 
 
+def _crash_log(exc_info):
+    """Write crash to file so user can find it after restart."""
+    try:
+        path = os.path.join(
+            os.environ.get("APPDATA", os.path.expanduser("~")), "Zametka", "crash.log"
+        )
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            traceback.print_exception(*exc_info, file=f)
+            f.write("\n")
+    except Exception:
+        pass
+
+
+def _show_error_dialog(title, message):
+    """Show an error dialog, creating QApplication if needed."""
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    from PyQt6.QtWidgets import QMessageBox
+    QMessageBox.critical(None, title, message)
+
+
+def excepthook(exc_type, exc_value, exc_tb):
+    """Global hook: log crash, show dialog, then exit."""
+    _crash_log((exc_type, exc_value, exc_tb))
+    _show_error_dialog(
+        "Zametka — Unexpected Error",
+        f"{exc_type.__name__}: {exc_value}\n\n"
+        f"A crash log was saved to %APPDATA%\\Zametka\\crash.log",
+    )
+    sys.exit(1)
+
+
+sys.excepthook = excepthook
+
+
 def main():
     setup_logging()
     logger = logging.getLogger(__name__)
@@ -32,24 +70,33 @@ def main():
         print("File associations removed.")
         return
 
-    app = QApplication(sys.argv)
-    app.setApplicationName("Zametka")
-    app.setOrganizationName("Zametka")
+    try:
+        app = QApplication(sys.argv)
+        app.setApplicationName("Zametka")
+        app.setOrganizationName("Zametka")
 
-    ico = os.path.join(os.path.dirname(__file__), "assets", "app_icon.ico")
-    if os.path.isfile(ico):
-        app.setWindowIcon(QIcon(ico))
+        ico = os.path.join(os.path.dirname(__file__), "assets", "app_icon.ico")
+        if os.path.isfile(ico):
+            app.setWindowIcon(QIcon(ico))
 
-    config = get_config()
-    logger.info(f"Config loaded. Vault: {config.get('vault_path') or '(none)'}")
+        config = get_config()
+        logger.info(f"Config loaded. Vault: {config.get('vault_path') or '(none)'}")
 
-    window = MainWindow()
-    window.show()
-    window.raise_()
-    window.activateWindow()
+        window = MainWindow()
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
-    register_on_startup()
-    sys.exit(app.exec())
+        register_on_startup()
+        sys.exit(app.exec())
+    except Exception:
+        exc_info = sys.exc_info()
+        _crash_log(exc_info)
+        _show_error_dialog(
+            "Zametka — Startup Error",
+            traceback.format_exc(),
+        )
+        sys.exit(1)
 
 
 def register_on_startup():

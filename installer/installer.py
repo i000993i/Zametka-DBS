@@ -190,7 +190,7 @@ class InstallThread(QThread):
                 winreg.SetValue(key, "DisplayName", winreg.REG_SZ, "Zametka")
                 winreg.SetValue(key, "UninstallString", winreg.REG_SZ, f'"{uninst_cmd}"')
                 winreg.SetValue(key, "DisplayIcon", winreg.REG_SZ, str(exe_path))
-                winreg.SetValue(key, "DisplayVersion", winreg.REG_SZ, "0.1.0")
+                winreg.SetValue(key, "DisplayVersion", winreg.REG_SZ, "0.2.1")
                 winreg.SetValue(key, "Publisher", winreg.REG_SZ, "Zametka Team")
         except Exception:
             pass

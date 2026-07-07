@@ -40,4 +40,9 @@ def tr(key: str, *args, **kwargs) -> str:
             text = text.format(*args)
         except (IndexError, KeyError):
             pass
+    elif kwargs:
+        try:
+            text = text.format(**kwargs)
+        except (IndexError, KeyError):
+            pass
     return text

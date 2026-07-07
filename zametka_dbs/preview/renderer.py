@@ -35,7 +35,11 @@ def render_markdown(text: str, note_map: dict | None = None, dark: bool = True) 
         html = _rust_render(text)
     else:
         from markdown_it import MarkdownIt
-        md = MarkdownIt("default", {"breaks": True, "linkify": True})
+        try:
+            import linkify_it  # noqa: F401
+            md = MarkdownIt("default", {"breaks": True, "linkify": True})
+        except ImportError:
+            md = MarkdownIt("default", {"breaks": True, "linkify": False})
         html = md.render(text)
     html = process_tags(html)
     html = process_callouts(html)

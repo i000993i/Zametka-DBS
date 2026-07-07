@@ -4,6 +4,7 @@ Zametka Installer — скачивает последнюю версию с GitH
 Сборка: PyInstaller installer.py --onefile --windowed --icon=..\assets\app_icon.ico
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -254,6 +255,7 @@ class InstallPage(QWizardPage):
         self._log.setReadOnly(True)
         self._log.setMaximumHeight(120)
         layout.addWidget(self._log)
+        self._zip_url = ""
 
     def initializePage(self):
         self._bar.setValue(0)
@@ -276,6 +278,7 @@ class InstallPage(QWizardPage):
                 self._status.setText("Не найден архив для скачивания")
                 self.wizard().button(QWizard.WizardButton.CommitButton).setEnabled(False)
                 return
+            self._zip_url = url
             tmp = tempfile.gettempdir()
             zip_dest = os.path.join(tmp, "Zametka-Latest.zip")
             self._log.append(f"Скачивание: {url}")
@@ -289,8 +292,50 @@ class InstallPage(QWizardPage):
         except Exception as e:
             self._status.setText(f"Ошибка: {e}")
 
+    def _verify_hash(self, zip_path, sha256_url):
+        if "zipball" in self._zip_url:
+            self._log.append("SHA256: пропущено (архив из git, без контрольной суммы)")
+            return True
+        try:
+            req = Request(sha256_url, headers={"User-Agent": "Zametka-Installer/1.0"})
+            ctx = ssl.create_default_context()
+            resp = urlopen(req, timeout=15, context=ctx)
+            expected = resp.read().decode("utf-8").strip()
+        except HTTPError as e:
+            if e.code == 404:
+                self._log.append("SHA256: файл не найден (старый релиз), проверка пропущена")
+                return True
+            self._log.append(f"SHA256: ошибка загрузки ({e})")
+            return True
+        if len(expected) != 64:
+            self._log.append(f"SHA256: неверный формат ({expected})")
+            return True
+        sha256 = hashlib.sha256()
+        with open(zip_path, "rb") as f:
+            while True:
+                chunk = f.read(65536)
+                if not chunk:
+                    break
+                sha256.update(chunk)
+        actual = sha256.hexdigest().lower()
+        if actual != expected.lower():
+            self._log.append(
+                f"ОШИБКА: контрольная сумма не совпадает!\n"
+                f"Ожидалось: {expected}\n"
+                f"Получено:  {actual}"
+            )
+            return False
+        self._log.append("Контрольная сумма SHA256 совпадает")
+        return True
+
     def _start_install(self, zip_path):
-        self._log.append("Архив загружен, начинаю установку...")
+        self._log.append("Архив загружен, проверка...")
+        sha256_url = self._zip_url + ".sha256"
+        if not self._verify_hash(zip_path, sha256_url):
+            self._status.setText("Ошибка: архив повреждён или изменён")
+            self.wizard().button(QWizard.WizardButton.CommitButton).setEnabled(False)
+            return
+        self._log.append("Начинаю установку...")
         self._status.setText("Установка...")
         install_dir = self.field("install_dir")
         desktop = self.field("desktop_shortcut")

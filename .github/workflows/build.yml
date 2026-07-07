@@ -44,7 +44,14 @@ jobs:
         run: |
           Compress-Archive -Path dist/Zametka/* -DestinationPath Zametka-Latest.zip -Force
 
+      - name: Generate SHA256
+        run: |
+          $hash = (Get-FileHash -Path Zametka-Latest.zip -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path Zametka-Latest.zip.sha256 -Value $hash
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: Zametka-Latest.zip
+          files: |
+            Zametka-Latest.zip
+            Zametka-Latest.zip.sha256
           generate_release_notes: true

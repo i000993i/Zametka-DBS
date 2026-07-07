@@ -9,14 +9,21 @@ BLOCK_CIPHER = None
 
 ROOT = Path(os.getcwd())
 
-# Locate the Rust core .pyd file
+# Locate the Rust core .pyd files
 _venv_site = Path(sys.prefix) / "Lib" / "site-packages"
-_rust_pkg = _venv_site / "zametka_core"
 _rust_binaries = []
+
+_rust_pkg = _venv_site / "zametka_core"
 if _rust_pkg.exists():
     for f in _rust_pkg.iterdir():
         if f.suffix in (".pyd", ".dll"):
             _rust_binaries.append((str(f), "zametka_core"))
+
+_conpty_pkg = _venv_site / "zametka_conpty"
+if _conpty_pkg.exists():
+    for f in _conpty_pkg.iterdir():
+        if f.suffix in (".pyd", ".dll"):
+            _rust_binaries.append((str(f), "zametka_conpty"))
 
 a = Analysis(
     ["app.py"],
@@ -24,6 +31,7 @@ a = Analysis(
     binaries=_rust_binaries,
     datas=[
         (str(ROOT / "assets" / "svg"), "assets/svg"),
+        (str(ROOT / "assets" / "lang"), "assets/lang"),
         (str(ROOT / "assets" / "app_icon.ico"), "assets"),
     ],
     hiddenimports=[
@@ -31,6 +39,7 @@ a = Analysis(
         "watchdog.observers",
         "watchdog.observers.read_directory_changes",
         "zametka_core",
+        "zametka_conpty",
     ],
     hookspath=[],
     hooksconfig={},

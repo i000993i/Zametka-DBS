@@ -14,10 +14,11 @@ from zametka_dbs.search.engine import SearchEngine
 assert SearchEngine() is not None
 
 from zametka_dbs.markdown.wikilinks import parse_wikilinks
-assert parse_wikilinks('[[test]]') == ['test']
+result = parse_wikilinks('[[test]]')
+assert len(result) == 1
+assert result[0]['target'] == 'test'
 
 from zametka_dbs.ui.pinned_widget import PinnedWidget
-pw = PinnedWidget.__new__(PinnedWidget)
-assert pw._ensure_list('["a"]') == ['a']
+assert PinnedWidget._ensure_list('["a"]') == ['a']
 
 print('All fallback tests passed')

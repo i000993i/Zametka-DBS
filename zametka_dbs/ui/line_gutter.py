@@ -29,6 +29,7 @@ class LineGutter(QWidget):
         if editor is None:
             return
         self._font = QFont(editor.font())
+        self._font.setPointSize(max(6, self._font.pointSize() - 2))
         self._fmf = QFontMetricsF(self._font)
         self.setFixedWidth(self._calc_width(1))
         editor.blockCountChanged.connect(self._on_blocks_changed)

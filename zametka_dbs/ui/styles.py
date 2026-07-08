@@ -462,6 +462,10 @@ def the_stylesheet(theme: str = "dark") -> str:
             background-color: {v["sel_bg"]};
             color: {v["fg0"]};
         }}
+        QTreeView::branch {{
+            border: none;
+            background: transparent;
+        }}
         QTreeView::branch:has-children:!has-siblings:closed,
         QTreeView::branch:closed:has-children:has-siblings {{
             border-image: none;

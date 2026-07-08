@@ -115,7 +115,7 @@ class LineGutter(QWidget):
                 line_ascent = self._fmf.ascent()
                 if block_layout and block_layout.lineCount() > 0:
                     line = block_layout.lineAt(0)
-                    draw_y = top + line.y()
+                    draw_y = top + line.y() + 10
                     line_h = line.height()
                     line_ascent = line.ascent()
 

@@ -4,6 +4,27 @@ from zametka_dbs.ui.styles import _THEME_VARS
 from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetricsF, QPen, QTextCursor
 
 from zametka_dbs.core.config import get_config
+from zametka_dbs.core.rust_bridge import HAS_RUST, rust_compute_line_numbers
+
+
+def _py_compute_line_numbers(text: str) -> list[tuple[int, str]]:
+    result: list[tuple[int, str]] = []
+    display = 0
+    for line in text.split('\n'):
+        t = line.strip()
+        if not t:
+            result.append((display, "blank"))
+        else:
+            display += 1
+            if t.startswith("```"):
+                result.append((display, "code"))
+            elif t.startswith("#"):
+                result.append((display, "heading"))
+            elif t.startswith(("- ", "* ", "+ ")):
+                result.append((display, "list"))
+            else:
+                result.append((display, "normal"))
+    return result
 
 
 class LineGutter(QWidget):
@@ -13,7 +34,7 @@ class LineGutter(QWidget):
         super().__init__(editor)
         self._editor = editor
         self._current_line = 0
-        self._line_types: dict[int, str] = {}
+        self._line_data: list[tuple[int, str]] = []
         config = get_config()
         self._dark = config.get("theme", "dark") == "dark"
         self._font = QFont()
@@ -51,27 +72,16 @@ class LineGutter(QWidget):
     def _classify(self):
         if not self._editor:
             return
-        self._line_types.clear()
-        block = self._editor.document().begin()
-        while block.isValid():
-            t = block.text().strip()
-            n = block.blockNumber()
-            if not t:
-                self._line_types[n] = "blank"
-            elif t.startswith("```"):
-                self._line_types[n] = "code"
-            elif t.startswith("#"):
-                self._line_types[n] = "heading"
-            elif t.startswith(("- ", "* ", "+ ")):
-                self._line_types[n] = "list"
-            else:
-                self._line_types[n] = "normal"
-            block = block.next()
+        text = self._editor.toPlainText()
+        if HAS_RUST and rust_compute_line_numbers is not None:
+            self._line_data = rust_compute_line_numbers(text)
+        else:
+            self._line_data = _py_compute_line_numbers(text)
         self._update_width()
 
     def _update_width(self):
-        non_blank = sum(1 for t in self._line_types.values() if t != "blank")
-        digits = max(3, len(str(max(non_blank, 1))))
+        max_num = max((d for d, t in self._line_data if t != "blank"), default=0)
+        digits = max(3, len(str(max(max_num, 1))))
         new_w = int(self._fmf.horizontalAdvance("0" * digits)) + 20
         self.setFixedWidth(new_w)
         if self._editor:
@@ -97,7 +107,6 @@ class LineGutter(QWidget):
         visible_bot = event.rect().bottom()
 
         block = doc.begin()
-        display_num = 0
         while block.isValid():
             geo = self._editor.blockBoundingGeometry(block)
             viewport_rect = geo.translated(-offset)
@@ -109,10 +118,10 @@ class LineGutter(QWidget):
                 break
             if bot >= visible_top:
                 n = block.blockNumber()
-                typ = self._line_types.get(n)
-                if typ is None:
-                    is_blank = not block.text().strip()
-                    typ = "blank" if is_blank else "normal"
+                if n < len(self._line_data):
+                    display_num, typ = self._line_data[n]
+                else:
+                    display_num, typ = 0, "normal"
                 active = n == self._current_line
 
                 cursor = QTextCursor(block)
@@ -129,9 +138,6 @@ class LineGutter(QWidget):
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                     hl.setAlpha(10)
                     painter.fillRect(QRectF(0, draw_y, self.width() - 1, line_h), hl)
-
-                if typ != "blank":
-                    display_num += 1
 
                 if active:
                     c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])

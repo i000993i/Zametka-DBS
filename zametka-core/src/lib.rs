@@ -2,6 +2,7 @@ mod config;
 mod markdown;
 mod search;
 mod language;
+mod linenumbers;
 
 use pyo3::prelude::*;
 
@@ -23,6 +24,9 @@ fn zametka_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Language
     m.add_function(wrap_pyfunction!(language::detect_language, m)?)?;
     m.add_function(wrap_pyfunction!(language::scan_folder_languages, m)?)?;
+
+    // Line numbers
+    linenumbers::register(m)?;
 
     Ok(())
 }

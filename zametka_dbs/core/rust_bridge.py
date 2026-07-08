@@ -13,6 +13,7 @@ try:
         build_backlinks as rust_build_backlinks,
         detect_language as rust_detect_language,
         scan_folder_languages as rust_scan_folder_languages,
+        compute_line_numbers as rust_compute_line_numbers,
     )
     HAS_RUST = True
 except ImportError as e:
@@ -27,6 +28,7 @@ except ImportError as e:
     rust_build_backlinks = None
     rust_detect_language = None
     rust_scan_folder_languages = None
+    rust_compute_line_numbers = None
 
 try:
     from zametka_conpty import ConPtyProcess

@@ -31,7 +31,6 @@ from zametka_dbs.ui.notes_browser import NotesBrowser
 from zametka_dbs.ui.note_window import NoteWindow
 from zametka_dbs.markdown.wikilinks import LinkResolver, BacklinkIndex
 from zametka_dbs.search.engine import SearchEngine
-from zametka_dbs.ui.native_terminal_widget import NativeTerminalWidget as TerminalWidget
 from zametka_dbs.ui.command_palette import CommandPalette
 
 try:
@@ -199,7 +198,6 @@ class MainWindow(QMainWindow):
         )
         self._split_btn.setToolTip(tr("editor.tooltip.split"))
         self._search_btn.setText(tr("editor.search"))
-        self._terminal_btn.setToolTip(tr("editor.tooltip.terminal"))
         self._file_search_edit.setPlaceholderText(tr("editor.search_placeholder"))
         self.status_saved.setText(tr("status.saved"))
 
@@ -212,7 +210,6 @@ class MainWindow(QMainWindow):
         self._act_quit.setText(tr("menu.file.quit"))
         self._view_menu.setTitle(tr("menu.view"))
         self._act_preview.setText(tr("menu.view.preview"))
-        self._act_terminal.setText(tr("menu.view.terminal"))
         self._act_search.setText(tr("menu.view.search"))
         self._act_file_search.setText(tr("menu.view.file_search"))
         self._act_palette.setText(tr("menu.view.command_palette"))
@@ -482,20 +479,10 @@ class MainWindow(QMainWindow):
         self._search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._search_btn.clicked.connect(self._toggle_search)
 
-        self._terminal_btn = QPushButton()
-        self._terminal_btn.setIcon(icon("terminal"))
-        self._terminal_btn.setIconSize(QSize(14, 14))
-        self._terminal_btn.setObjectName("terminal-btn")
-        self._terminal_btn.setFixedSize(20, 20)
-        self._terminal_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._terminal_btn.setToolTip(tr("editor.tooltip.terminal"))
-        self._terminal_btn.setCheckable(True)
-        self._terminal_btn.clicked.connect(self._toggle_terminal)
-
         self.status_info = QLabel(tr("status.ready"))
 
         self._lang_btn = QPushButton()
-        self._lang_btn.setObjectName("terminal-btn")
+        self._lang_btn.setObjectName("lang-btn")
         self._lang_btn.setFixedSize(26, 20)
         self._lang_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._lang_btn.clicked.connect(self._toggle_language)
@@ -510,7 +497,6 @@ class MainWindow(QMainWindow):
         self._progress_bar.hide()
 
         self.status_bar.addWidget(self.status_saved)
-        self.status_bar.addPermanentWidget(self._terminal_btn)
         self.status_bar.addPermanentWidget(self._search_btn)
         self.status_bar.addPermanentWidget(self.status_cursor)
         self.status_bar.addPermanentWidget(self.status_words)
@@ -554,11 +540,6 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(top_row, 1)
 
-        self.terminal_widget = TerminalWidget()
-        self.terminal_widget.setVisible(False)
-        self.terminal_widget.toggled.connect(lambda v: self._terminal_btn.setChecked(v))
-        main_layout.addWidget(self.terminal_widget)
-
         self.setCentralWidget(central)
 
     def _create_menu_bar(self):
@@ -592,9 +573,6 @@ class MainWindow(QMainWindow):
         self._act_preview = QAction(tr("menu.view.preview"), self)
         self._act_preview.triggered.connect(self._toggle_preview)
         self._view_menu.addAction(self._act_preview)
-        self._act_terminal = QAction(tr("menu.view.terminal"), self)
-        self._act_terminal.triggered.connect(self._toggle_terminal)
-        self._view_menu.addAction(self._act_terminal)
         self._act_search = QAction(tr("menu.view.search"), self)
         self._act_search.triggered.connect(self._toggle_search)
         self._view_menu.addAction(self._act_search)
@@ -676,9 +654,6 @@ class MainWindow(QMainWindow):
         sc_fs = QShortcut(QKeySequence("F11"), self)
         sc_fs.activated.connect(self._toggle_maximize)
 
-        sc_term = QShortcut(QKeySequence("Ctrl+`"), self)
-        sc_term.activated.connect(self._toggle_terminal)
-
         sc_file_search = QShortcut(QKeySequence("Ctrl+Shift+F"), self)
         sc_file_search.activated.connect(self._toggle_file_search)
 
@@ -719,7 +694,6 @@ class MainWindow(QMainWindow):
             ("toggle_preview", "Toggle Preview (Ctrl+P)"),
             ("toggle_search", "Toggle Search (Ctrl+F)"),
             ("toggle_file_search", "Search Files (Ctrl+Shift+F)"),
-            ("toggle_terminal", "Toggle Terminal (Ctrl+`)"),
             ("toggle_theme", "Toggle Theme"),
             ("toggle_split", "Split Editor (Ctrl+Shift+S)"),
             ("toggle_maximize", "Toggle Fullscreen (F11)"),
@@ -736,7 +710,6 @@ class MainWindow(QMainWindow):
             "toggle_preview": self._toggle_preview,
             "toggle_search": self._toggle_search,
             "toggle_file_search": self._toggle_file_search,
-            "toggle_terminal": self._toggle_terminal,
             "toggle_theme": self._toggle_theme,
             "toggle_split": self._toggle_split,
             "toggle_maximize": self._toggle_maximize,
@@ -758,13 +731,6 @@ class MainWindow(QMainWindow):
 
     def _on_file_search_text_changed(self, text: str):
         self.file_tree.set_filter_text(text)
-
-    def _toggle_terminal(self):
-        visible = not self.terminal_widget.isVisible()
-        self.terminal_widget.setVisible(visible)
-        self._terminal_btn.setChecked(visible)
-        if visible:
-            self.terminal_widget.focus_input()
 
     def _save_current_file(self):
         if not self._current_file or self._current_file.startswith("__"):
@@ -899,8 +865,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._stop_watcher()
-        if hasattr(self, 'terminal_widget'):
-            self.terminal_widget.terminate_all()
         super().closeEvent(event)
 
     def dragEnterEvent(self, event):
@@ -946,7 +910,6 @@ class MainWindow(QMainWindow):
 
     def _init_vault(self, vault_path: str):
         self.file_tree.set_vault_path(vault_path)
-        self.terminal_widget.set_workdir(vault_path)
 
         self._progress_bar.show()
         self._progress_bar.setRange(0, 0)

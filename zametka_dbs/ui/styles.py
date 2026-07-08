@@ -181,7 +181,7 @@ def the_stylesheet(theme: str = "dark") -> str:
         QPushButton#search-btn:checked {{
             color: #4a9eff;
         }}
-        QPushButton#terminal-btn {{
+        QPushButton#lang-btn {{
             background-color: transparent;
             color: {v["fg1"]};
             border: none;
@@ -189,12 +189,9 @@ def the_stylesheet(theme: str = "dark") -> str:
             font-size: 11px;
             padding: 2px 6px;
         }}
-        QPushButton#terminal-btn:hover {{
+        QPushButton#lang-btn:hover {{
             background-color: {v["bg2"]};
             color: {v["fg0"]};
-        }}
-        QPushButton#terminal-btn:checked {{
-            color: #4a9eff;
         }}
         QProgressBar#status-progress {{
             background-color: {v["bg2"]};
@@ -207,10 +204,6 @@ def the_stylesheet(theme: str = "dark") -> str:
         QProgressBar#status-progress::chunk {{
             background-color: #4a9eff;
             border-radius: 2px;
-        }}
-        QFrame#terminal-container {{
-            background-color: {v["bg0"]};
-            border-top: 1px solid {v["border"]};
         }}
         QStackedWidget#sidebar-stack {{
             background-color: {v["bg1"]};

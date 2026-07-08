@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QRectF, QSize, pyqtSignal
 from zametka_dbs.ui.styles import _THEME_VARS
-from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPen
+from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetricsF, QPen
 
 from zametka_dbs.core.config import get_config
 
@@ -17,7 +17,7 @@ class LineGutter(QWidget):
         config = get_config()
         self._dark = config.get("theme", "dark") == "dark"
         self._font = QFont()
-        self._fm = None
+        self._fmf = None
         self.setFixedWidth(40)
 
     def set_dark(self, dark: bool):
@@ -29,7 +29,7 @@ class LineGutter(QWidget):
         if editor is None:
             return
         self._font = QFont(editor.font())
-        self._fm = QFontMetrics(self._font)
+        self._fmf = QFontMetricsF(self._font)
         self.setFixedWidth(self._calc_width(1))
         editor.blockCountChanged.connect(self._on_blocks_changed)
         editor.verticalScrollBar().valueChanged.connect(self.update)
@@ -72,10 +72,10 @@ class LineGutter(QWidget):
 
     def _calc_width(self, block_count: int) -> int:
         digits = max(3, len(str(max(block_count, 1))))
-        return self._fm.horizontalAdvance("0" * digits) + 20
+        return int(self._fmf.horizontalAdvance("0" * digits)) + 20
 
     def paintEvent(self, event):
-        if not self._editor or self._fm is None:
+        if not self._editor or self._fmf is None:
             return
 
         painter = QPainter(self)
@@ -97,8 +97,8 @@ class LineGutter(QWidget):
         while block.isValid():
             geo = self._editor.blockBoundingGeometry(block)
             viewport_rect = geo.translated(-offset)
-            top = int(viewport_rect.y())
-            height = int(viewport_rect.height())
+            top = viewport_rect.y()
+            height = viewport_rect.height()
             bot = top + height
 
             if top > visible_bot:
@@ -109,17 +109,17 @@ class LineGutter(QWidget):
                 active = n == self._current_line
 
                 block_layout = block.layout()
-                draw_y = top + 1
+                draw_y = top
                 line_h = height
                 if block_layout and block_layout.lineCount() > 0:
                     line = block_layout.lineAt(0)
-                    draw_y = top + int(line.y()) + 1
-                    line_h = int(line.height())
+                    draw_y = top + line.y()
+                    line_h = line.height()
 
                 if active:
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                     hl.setAlpha(10)
-                    painter.fillRect(QRect(0, draw_y, self.width() - 1, line_h), hl)
+                    painter.fillRect(QRectF(0, draw_y, self.width() - 1, line_h), hl)
 
                 if active:
                     c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
@@ -137,9 +137,9 @@ class LineGutter(QWidget):
                 painter.setPen(c)
                 painter.setFont(self._font)
                 txt = str(n + 1)
-                x = self.width() - self._fm.horizontalAdvance(txt) - 12
-                y = draw_y + self._fm.ascent()
-                painter.drawText(x, y, txt)
+                x = self.width() - self._fmf.horizontalAdvance(txt) - 12
+                y = draw_y + self._fmf.ascent()
+                painter.drawText(int(x), int(y), txt)
 
             block = block.next()
 

@@ -112,10 +112,12 @@ class LineGutter(QWidget):
                 block_layout = block.layout()
                 draw_y = top
                 line_h = height
+                line_ascent = self._fmf.ascent()
                 if block_layout and block_layout.lineCount() > 0:
                     line = block_layout.lineAt(0)
-                    draw_y = top + line.y() + 2
+                    draw_y = top + line.y()
                     line_h = line.height()
+                    line_ascent = line.ascent()
 
                 if active:
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
@@ -139,7 +141,7 @@ class LineGutter(QWidget):
                 painter.setFont(self._font)
                 txt = str(n + 1)
                 x = self.width() - self._fmf.horizontalAdvance(txt) - 12
-                y = draw_y + self._fmf.ascent()
+                y = draw_y + line_ascent
                 painter.drawText(int(x), int(y), txt)
 
             block = block.next()

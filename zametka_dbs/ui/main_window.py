@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QFrame, QPushButton, QFileDialog, QTabBar, QMenu,
     QProgressBar, QLineEdit,
 )
-from PyQt6.QtCore import Qt, QPoint, QSize, QTimer, QMimeData, pyqtSignal, QThread, QObject, QUrl, QProcess
+from PyQt6.QtCore import Qt, QPoint, QSize, QTimer, QMimeData, pyqtSignal, QThread, QObject, QUrl
 from PyQt6.QtGui import QDrag
 from PyQt6.QtGui import QKeySequence, QShortcut, QAction, QPixmap, QColor, QFont
 from PyQt6.QtWidgets import QApplication, QCompleter
@@ -31,7 +31,7 @@ from zametka_dbs.ui.notes_browser import NotesBrowser
 from zametka_dbs.ui.note_window import NoteWindow
 from zametka_dbs.markdown.wikilinks import LinkResolver, BacklinkIndex
 from zametka_dbs.search.engine import SearchEngine
-from zametka_dbs.ui.terminal_widget import TerminalWidget
+from zametka_dbs.ui.native_terminal_widget import NativeTerminalWidget as TerminalWidget
 from zametka_dbs.ui.command_palette import CommandPalette
 
 try:
@@ -900,10 +900,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._stop_watcher()
         if hasattr(self, 'terminal_widget'):
-            proc = getattr(self.terminal_widget, 'process', None)
-            if proc is not None and proc.state() != QProcess.ProcessState.NotRunning:
-                proc.kill()
-                proc.waitForFinished(3000)
+            self.terminal_widget.terminate_all()
         super().closeEvent(event)
 
     def dragEnterEvent(self, event):

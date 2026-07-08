@@ -57,6 +57,7 @@ class LineGutter(QWidget):
         editor.cursorPositionChanged.connect(self._on_cursor_moved)
         editor.textChanged.connect(self._classify)
         editor.selectionChanged.connect(self.update)
+        editor.document().contentsChanged.connect(self._classify)
         self._classify()
         self._update_width()
 

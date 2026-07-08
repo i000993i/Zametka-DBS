@@ -83,47 +83,27 @@ def _default_shell() -> str:
     return "cmd.exe"
 
 
-def _enum_windows_proc(hwnd, lparam):
-    """Callback for EnumWindows — finds the console window by process ID."""
-    pid = ctypes.wintypes.DWORD()
-    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    if pid.value == lparam:
-        buf = ctypes.create_unicode_buffer(256)
-        user32.GetClassNameW(hwnd, buf, 256)
-        if buf.value == "ConsoleWindowClass":
-            ctypes.cast(lparam, ctypes.POINTER(ctypes.c_void_p))[0] = hwnd
-            return False
-    return True
-
-
 def _find_console_window(pid, timeout=5.0):
+    """Find the console window HWND for a given process ID."""
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        for _ in range(20):
-            hwnd = ctypes.c_void_p()
-            user32.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)(_enum_windows_proc), pid)
-            # Try direct approach
-            hwnd = user32.FindWindowW("ConsoleWindowClass", None)
-            if hwnd:
-                actual_pid = ctypes.wintypes.DWORD()
-                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(actual_pid))
-                if actual_pid.value == pid:
-                    return hwnd
-            time.sleep(0.1)
-    return None
+    hwnds = []
 
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def _enum_proc(hwnd, _lparam):
+        hwnds.append(hwnd)
+        return True
 
-def _find_child_console(parent_hwnd, pid, timeout=5.0):
-    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        hwnd = user32.FindWindowExW(parent_hwnd, None, "ConsoleWindowClass", None)
-        if hwnd:
-            return hwnd
-        hwnd = user32.FindWindowW("ConsoleWindowClass", None)
-        if hwnd:
-            actual_pid = ctypes.wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(actual_pid))
-            if actual_pid.value == pid:
+        hwnds.clear()
+        user32.EnumWindows(_enum_proc, 0)
+        for hwnd in hwnds:
+            pid_buf = ctypes.wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid_buf))
+            if pid_buf.value != pid:
+                continue
+            buf = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, buf, 256)
+            if buf.value == "ConsoleWindowClass":
                 return hwnd
         time.sleep(0.1)
     return None

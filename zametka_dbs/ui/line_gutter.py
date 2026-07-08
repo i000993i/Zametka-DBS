@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal, QPoint
+from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal
 from zametka_dbs.ui.styles import _THEME_VARS
 from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPen
 
@@ -109,11 +109,11 @@ class LineGutter(QWidget):
                 active = n == self._current_line
 
                 block_layout = block.layout()
-                draw_y = top
+                draw_y = top + 1
                 line_h = height
                 if block_layout and block_layout.lineCount() > 0:
                     line = block_layout.lineAt(0)
-                    draw_y = top + int(line.y())
+                    draw_y = top + int(line.y()) + 1
                     line_h = int(line.height())
 
                 if active:

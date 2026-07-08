@@ -90,31 +90,35 @@ class LineGutter(QWidget):
 
         doc = self._editor.document()
         offset = self._editor.contentOffset()
-        lh = self._fm.height()
         visible_top = event.rect().top()
         visible_bot = event.rect().bottom()
 
         block = doc.begin()
         while block.isValid():
-            block_layout = block.layout()
-            blk_y = block_layout.position().y() - offset.y()
-            h = int(block_layout.boundingRect().height())
-            blk_bot = int(blk_y) + h
+            geo = self._editor.blockBoundingGeometry(block)
+            viewport_rect = geo.translated(-offset)
+            top = int(viewport_rect.y())
+            height = int(viewport_rect.height())
+            bot = top + height
 
-            if int(blk_y) > visible_bot:
+            if top > visible_bot:
                 break
-            if blk_bot >= visible_top and block_layout.lineCount() > 0:
-                line = block_layout.lineAt(0)
-                draw_y = int(blk_y + line.y())
-
+            if bot >= visible_top:
                 n = block.blockNumber()
                 typ = self._line_types.get(n, "normal")
                 active = n == self._current_line
 
+                block_layout = block.layout()
+                draw_y = top
+                line_h = height
+                if block_layout and block_layout.lineCount() > 0:
+                    line = block_layout.lineAt(0)
+                    draw_y = top + int(line.y())
+                    line_h = int(line.height())
+
                 if active:
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                     hl.setAlpha(10)
-                    line_h = int(line.height())
                     painter.fillRect(QRect(0, draw_y, self.width() - 1, line_h), hl)
 
                 if active:

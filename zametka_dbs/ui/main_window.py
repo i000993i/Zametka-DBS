@@ -23,13 +23,12 @@ from zametka_dbs.ui.code_editor import CodeEditor
 from zametka_dbs.ui.file_tree_widget import FileTreeWidget
 from zametka_dbs.ui.document_viewer import DocumentViewer
 from zametka_dbs.ui.preview_widget import PreviewWidget
-from zametka_dbs.ui.backlinks_panel import BacklinksPanel
 from zametka_dbs.ui.search_widget import SearchWidget
 from zametka_dbs.ui.pinned_widget import PinnedWidget
 from zametka_dbs.ui.activity_bar import ActivityBar
 from zametka_dbs.ui.notes_browser import NotesBrowser
 from zametka_dbs.ui.note_window import NoteWindow
-from zametka_dbs.markdown.wikilinks import LinkResolver, BacklinkIndex
+from zametka_dbs.markdown.wikilinks import LinkResolver
 from zametka_dbs.search.engine import SearchEngine
 from zametka_dbs.ui.command_palette import CommandPalette
 
@@ -46,11 +45,10 @@ class VaultWorker(QObject):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal()
 
-    def __init__(self, vault_path, resolver, backlinks, search_engine):
+    def __init__(self, vault_path, resolver, search_engine):
         super().__init__()
         self._vault_path = vault_path
         self._resolver = resolver
-        self._backlinks = backlinks
         self._search_engine = search_engine
         self._cancelled = False
 
@@ -83,8 +81,6 @@ class VaultWorker(QObject):
                 self.finished.emit()
                 return
             self.progress.emit(i + 1, total, f"Building links {i+1} of {total}...")
-            self._backlinks.index_file(fp)
-        self._backlinks._rebuild_backlinks()
 
         self.progress.emit(total, total, "Ready")
         self.finished.emit()
@@ -98,11 +94,8 @@ class MainWindow(QMainWindow):
 
         # Wikilinks engine
         self._resolver = LinkResolver()
-        self._backlinks = BacklinkIndex(self._resolver)
-
         # Search engine
         self._search_engine = SearchEngine()
-        self._backlinks_visible = True
         self._preview_visible = True
 
         # Tab state
@@ -312,9 +305,6 @@ class MainWindow(QMainWindow):
         self.pinned_widget.item_clicked.connect(self._on_pinned_item_clicked)
         explorer_layout.addWidget(self.pinned_widget)
 
-        self.backlinks_panel = BacklinksPanel()
-        explorer_layout.addWidget(self.backlinks_panel)
-
         self._sidebar_stack.addWidget(explorer_page)
 
         # Page 1: Search
@@ -512,16 +502,10 @@ class MainWindow(QMainWindow):
         self._activity_bar.set_active(index)
         if index == 1:
             self.search_widget.focus()
-            self._backlinks_visible = self.backlinks_panel.isVisible()
-            self.backlinks_panel.setVisible(False)
         elif index == 2:
             self.notes_browser.refresh()
-            self.backlinks_panel.setVisible(False)
         elif index == 3:
             self.git_history.set_vault_path(self._resolver._vault_path)
-            self.backlinks_panel.setVisible(False)
-        else:
-            self.backlinks_panel.setVisible(getattr(self, '_backlinks_visible', True))
 
     def _setup_layout(self):
         central = QWidget()
@@ -795,7 +779,6 @@ class MainWindow(QMainWindow):
         self.file_tree.file_opened.connect(self._on_file_opened)
         self.preview.wikilink_clicked.connect(self._on_wikilink_clicked)
         self.preview.rendered.connect(self._on_preview_rendered)
-        self.backlinks_panel.backlink_clicked.connect(self._on_file_opened)
         self.search_widget.result_clicked.connect(self._on_file_opened)
         self.search_widget.replace_requested.connect(self._on_replace_in_file)
 
@@ -919,7 +902,7 @@ class MainWindow(QMainWindow):
 
         self._vault_thread = QThread()
         self._vault_worker = VaultWorker(
-            vault_path, self._resolver, self._backlinks, self._search_engine
+            vault_path, self._resolver, self._search_engine
         )
         self._vault_worker.moveToThread(self._vault_thread)
         self._vault_thread.started.connect(self._vault_worker.run)
@@ -1094,10 +1077,6 @@ class MainWindow(QMainWindow):
 
         if path and not is_untitled and not viewer_path:
             self.status_info.setText(path)
-            backlinks = self._backlinks.get_backlinks(path)
-            self.backlinks_panel.update_backlinks(backlinks)
-        else:
-            self.backlinks_panel.clear()
 
         is_html = path and not is_untitled and path.lower().endswith((".html", ".htm"))
         self._html_toggle_btn.setVisible(is_html)

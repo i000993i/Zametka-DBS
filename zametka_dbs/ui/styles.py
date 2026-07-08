@@ -312,36 +312,6 @@ def the_stylesheet(theme: str = "dark") -> str:
             border: 1px solid {v["border2"]};
             border-radius: 4px;
         }}
-        QWidget#backlinks-panel {{
-            background-color: {v["bg0"]};
-            border-top: 1px solid {v["border"]};
-        }}
-        QWidget#backlinks-header {{
-            background-color: {v["bg0"]};
-        }}
-        QLabel#backlinks-header-label {{
-            color: {v["fg2"]};
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }}
-        QListWidget#backlinks-list {{
-            background-color: {v["bg0"]};
-            color: {v["fg2"]};
-            font-size: 12px;
-            border: none;
-            outline: none;
-            padding: 2px 0;
-        }}
-        QListWidget#backlinks-list::item {{
-            padding: 2px 8px;
-            border: none;
-        }}
-        QListWidget#backlinks-list::item:hover {{
-            background-color: {v["bg2"]};
-            color: {v["fg0"]};
-        }}
         QWidget#pinned-header {{
             background-color: {v["bg0"]};
             border-bottom: 1px solid {v["border"]};

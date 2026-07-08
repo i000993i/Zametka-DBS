@@ -114,7 +114,7 @@ class LineGutter(QWidget):
                 line_h = height
                 if block_layout and block_layout.lineCount() > 0:
                     line = block_layout.lineAt(0)
-                    draw_y = top + line.y()
+                    draw_y = top + line.y() + 2
                     line_h = line.height()
 
                 if active:

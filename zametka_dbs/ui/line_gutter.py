@@ -31,20 +31,17 @@ class LineGutter(QWidget):
         self._font = QFont(editor.font())
         self._font.setPointSize(max(6, self._font.pointSize() - 2))
         self._fmf = QFontMetricsF(self._font)
-        self.setFixedWidth(self._calc_width(1))
         editor.blockCountChanged.connect(self._on_blocks_changed)
         editor.verticalScrollBar().valueChanged.connect(self.update)
         editor.cursorPositionChanged.connect(self._on_cursor_moved)
         editor.textChanged.connect(self._classify)
         editor.selectionChanged.connect(self.update)
         self._classify()
+        self._update_width()
 
     def _on_blocks_changed(self, count):
-        new_w = self._calc_width(count)
-        self.setFixedWidth(new_w)
-        if self._editor:
-            self._editor.setViewportMargins(new_w, 0, 0, 0)
-        self.update()
+        self._classify()
+        self._update_width()
 
     def _on_cursor_moved(self):
         if self._editor:
@@ -70,10 +67,15 @@ class LineGutter(QWidget):
             else:
                 self._line_types[n] = "normal"
             block = block.next()
+        self._update_width()
 
-    def _calc_width(self, block_count: int) -> int:
-        digits = max(3, len(str(max(block_count, 1))))
-        return int(self._fmf.horizontalAdvance("0" * digits)) + 20
+    def _update_width(self):
+        non_blank = sum(1 for t in self._line_types.values() if t != "blank")
+        digits = max(3, len(str(max(non_blank, 1))))
+        new_w = int(self._fmf.horizontalAdvance("0" * digits)) + 20
+        self.setFixedWidth(new_w)
+        if self._editor:
+            self._editor.setViewportMargins(new_w, 0, 0, 0)
 
     def paintEvent(self, event):
         if not self._editor or self._fmf is None:
@@ -95,6 +97,7 @@ class LineGutter(QWidget):
         visible_bot = event.rect().bottom()
 
         block = doc.begin()
+        display_num = 0
         while block.isValid():
             geo = self._editor.blockBoundingGeometry(block)
             viewport_rect = geo.translated(-offset)
@@ -124,6 +127,9 @@ class LineGutter(QWidget):
                     hl.setAlpha(10)
                     painter.fillRect(QRectF(0, draw_y, self.width() - 1, line_h), hl)
 
+                if typ != "blank":
+                    display_num += 1
+
                 if active:
                     c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                 elif typ == "heading":
@@ -139,10 +145,11 @@ class LineGutter(QWidget):
 
                 painter.setPen(c)
                 painter.setFont(self._font)
-                txt = str(n + 1)
-                x = self.width() - self._fmf.horizontalAdvance(txt) - 12
+                txt = str(display_num) if typ != "blank" else ""
+                x = self.width() - self._fmf.horizontalAdvance(txt) - 12 if txt else 0
                 y = draw_y + line_ascent
-                painter.drawText(int(x), int(y), txt)
+                if txt:
+                    painter.drawText(int(x), int(y), txt)
 
             block = block.next()
 

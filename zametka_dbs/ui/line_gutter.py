@@ -126,18 +126,13 @@ class LineGutter(QWidget):
 
                 cursor = QTextCursor(block)
                 cursor_rect = self._editor.cursorRect(cursor)
-                draw_y = cursor_rect.y() + 15
+                draw_y = cursor_rect.y()
                 line_h = cursor_rect.height()
-                line_ascent = self._fmf.ascent()
-                block_layout = block.layout()
-                if block_layout and block_layout.lineCount() > 0:
-                    line = block_layout.lineAt(0)
-                    line_ascent = line.ascent()
 
                 if active:
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                     hl.setAlpha(10)
-                    painter.fillRect(QRectF(0, draw_y, self.width() - 1, line_h), hl)
+                    painter.fillRect(QRectF(0, draw_y, self.width(), line_h), hl)
 
                 if active:
                     c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
@@ -155,10 +150,11 @@ class LineGutter(QWidget):
                 painter.setPen(c)
                 painter.setFont(self._font)
                 txt = str(display_num) if typ != "blank" else ""
-                x = self.width() - self._fmf.horizontalAdvance(txt) - 12 if txt else 0
-                y = draw_y + line_ascent
                 if txt:
-                    painter.drawText(int(x), int(y), txt)
+                    text_w = self._fmf.horizontalAdvance(txt)
+                    x = self.width() - text_w - 8
+                    rect = QRectF(x, draw_y, text_w + 8, line_h)
+                    painter.drawText(rect, int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), txt)
 
             block = block.next()
 

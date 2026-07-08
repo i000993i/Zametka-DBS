@@ -7,14 +7,14 @@
 
 - **Markdown-редактор** с предпросмотром (Ctrl+P) — рендеринг через Rust (comrak) или markdown-it
 - **Подсветка синтаксиса** для 40+ языков, автоопределение темы (тёмная/светлая)
-- **[[Вики-ссылки]]** с обратными связями (backlinks)
+- **[[Вики-ссылки]]** с резолвингом — переход по `[[note]]` в предпросмотре
 - **Полнотекстовый поиск** по всем заметкам (TF-IDF, Rust)
 - **Прикрепление файлов/папок** (Pinned) — быстрый доступ к важному
 - **Дерево файлов** с навигацией как в VS Code
 - **Просмотр HTML/PDF** — Chromium (QWebEngineView) для `.html`, PyMuPDF для `.pdf/.epub/.cbz`
 - **Бейджи** — 201+ значок в 8 категориях с 6 стилями отображения
 - **Раздел "Notes"** — коллекция заметок в виде кирпичиков-карточек с бейджами
-- **Встроенный терминал** (Ctrl+`) — несколько вкладок, ConPTY (Rust), поддержка UTF-8, кликабельные ссылки/пути
+- **Встроенный терминал** (Ctrl+`) — несколько вкладок, ConPTY (Rust), поддержка UTF-8, кликабельные ссылки/пути *(удалён в v0.2.3)*
 - **Git History** — просмотр изменений, коммитов и диффов (асинхронно, без зависаний)
 - **Проверка обновлений** через GitHub (автоматическая при запуске)
 - **Переключение языка** (RU/EN) — кнопка в статус-баре
@@ -28,8 +28,9 @@
 |---|---|
 | `config.rs` | Загрузка/сохранение JSON-конфига, dot-нотация, native Python-типы |
 | `search.rs` | Инвертированный индекс, TF-IDF, рекурсивный обход папок |
-| `markdown.rs` | Рендеринг MD→HTML через comrak, парсинг `[[wikilinks]]`, backlinks |
+| `markdown.rs` | Рендеринг MD→HTML через comrak, парсинг `[[wikilinks]]` |
 | `language.rs` | Определение языка по расширению, сканирование папок (до 5 языков) |
+| `linenumbers.rs` | Нумерация строк с пропуском пустых строк, классификация (blank/code/heading/...) |
 
 ### `zametka-conpty` (PyO3-модуль)
 
@@ -90,7 +91,7 @@ iscc installer\setup.iss
 | `Ctrl+S` | Сохранить |
 | `Ctrl+P` | Предпросмотр |
 | `Ctrl+F` | Поиск |
-| `` Ctrl+` `` | Встроенный терминал |
+| `` Ctrl+` `` | Встроенный терминал *(удалён в v0.2.3)* |
 | `Ctrl+Shift+F` | Поиск файлов |
 | `Ctrl+Shift+P` | Палитра команд |
 | `Ctrl+Shift+S` | Разделить редактор |
@@ -121,15 +122,16 @@ zametka_dbs/
 ├── preview/          # Рендеринг Markdown (Rust / markdown-it)
 ├── search/           # Поиск (Rust / Python)
 └── ui/               # MainWindow, CodeEditor, Preview, FileTree, Pinned,
-                      # Backlinks, SearchWidget, NotesBrowser, NoteWindow,
-                      # PDF-вьюер (PyMuPDF), Terminal, CommandPalette, GitHistory
+                      # SearchWidget, NotesBrowser, NoteWindow,
+                      # PDF-вьюер (PyMuPDF), CommandPalette, GitHistory
 
 zametka-core/         # Rust → PyO3 (zametka_core.pyd)
 ├── src/
 │   ├── config.rs     #   Config: get/set с native Python-типами
 │   ├── search.rs     #   SearchIndex: TF-IDF
-│   ├── markdown.rs   #   comrak, wikilinks, backlinks
-│   └── language.rs   #   detect_language, scan_folder_languages
+│   ├── markdown.rs   #   comrak, wikilinks
+│   ├── language.rs   #   detect_language, scan_folder_languages
+│   └── linenumbers.rs#   compute_line_numbers (нумерация строк)
 ├── Cargo.toml
 └── pyproject.toml
 
@@ -163,7 +165,7 @@ app.py / python -m zametka_dbs
         ├── ActivityBar (48px): Explorer | Search | Notes | History
         │
         ├── Sidebar (QStackedWidget, 280px)
-        │     ├── Page 0: FileTree + Pinned + Backlinks (Explorer)
+        │     ├── Page 0: FileTree + Pinned (Explorer)
         │     ├── Page 1: SearchWidget (полнотекстовый поиск)
         │     ├── Page 2: NotesBrowser (карточки с бейджами)
         │     └── Page 3: GitHistory (асинхронный)
@@ -176,8 +178,6 @@ app.py / python -m zametka_dbs
         │     │     └── PreviewWidget (рендер Markdown, только для .md/.markdown/.mdown)
         │     ├── Page 1: QWebEngineView (Chromium, для .html)
         │     └── Page 2: DocumentViewer (PDF/EPUB через PyMuPDF)
-        │
-        ├── Terminal (нижняя панель, Ctrl+`, ConPTY, много вкладок, UTF-8)
         │
         ├── StatusBar
         │     ├── Статус сохранения + Позиция курсора + Счётчик слов

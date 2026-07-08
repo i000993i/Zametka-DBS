@@ -281,26 +281,38 @@ class NativeTerminalWidget(QFrame):
         self._container.setStyleSheet("background-color: #0a0a0a;")
         layout.addWidget(self._container, 1)
 
-        self._add_session()
+        # Force native window handle creation so winId() works later
+        self._container.winId()
 
-    def _add_session(self, cwd=None):
+    def _ensure_session(self):
+        if not self._sessions:
+            self._create_session(self._default_cwd)
+
+    def _create_session(self, cwd):
         idx = len(self._sessions)
-        tab_name = f"Term {idx + 1}"
-        self._tab_bar.addTab(tab_name)
-        self._tab_bar.setTabData(idx, str(idx))
-        self._tab_bar.setTabsClosable(True)
-
         session = NativeTerminalSession(
             self._shell, cwd or self._default_cwd,
             int(self._container.winId()),
         )
         self._sessions.append(session)
+        tab_name = f"Term {idx + 1}"
+        self._tab_bar.addTab(tab_name)
         self._tab_bar.setCurrentIndex(idx)
-
-        # Resize the new session to fill container
         QTimer.singleShot(500, lambda: self._resize_current())
 
+    def setVisible(self, visible: bool):
+        super().setVisible(visible)
+        if visible:
+            self._ensure_session()
+            QTimer.singleShot(200, self._resize_current)
+        self.toggled.emit(visible)
+
+    def _add_session(self, cwd=None):
+        self._create_session(cwd or self._default_cwd)
+
     def _switch_session(self, idx: int):
+        if not self._sessions:
+            return
         for i, s in enumerate(self._sessions):
             hwnd = s.hwnd()
             if hwnd:
@@ -321,10 +333,14 @@ class NativeTerminalWidget(QFrame):
 
     def _restart_current(self):
         idx = self._tab_bar.currentIndex()
+        if not self._sessions:
+            return
         if 0 <= idx < len(self._sessions):
             self._sessions[idx].cd(self._default_cwd)
 
     def _resize_current(self):
+        if not self._sessions:
+            return
         idx = self._tab_bar.currentIndex()
         if 0 <= idx < len(self._sessions):
             rect = self._container.rect()
@@ -332,19 +348,22 @@ class NativeTerminalWidget(QFrame):
 
     def _set_visible(self, visible: bool):
         self.setVisible(visible)
-        self.toggled.emit(visible)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QTimer.singleShot(50, self._resize_current)
 
     def focus_input(self):
+        if not self._sessions:
+            return
         idx = self._tab_bar.currentIndex()
         if 0 <= idx < len(self._sessions):
             self._sessions[idx].focus()
 
     def set_workdir(self, path: str):
         self._default_cwd = path
+        if not self._sessions:
+            return
         idx = self._tab_bar.currentIndex()
         if 0 <= idx < len(self._sessions):
             self._sessions[idx].cd(path)

@@ -109,7 +109,10 @@ class LineGutter(QWidget):
                 break
             if bot >= visible_top:
                 n = block.blockNumber()
-                typ = self._line_types.get(n, "normal")
+                typ = self._line_types.get(n)
+                if typ is None:
+                    is_blank = not block.text().strip()
+                    typ = "blank" if is_blank else "normal"
                 active = n == self._current_line
 
                 block_layout = block.layout()

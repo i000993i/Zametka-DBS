@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, QRectF, QSize, pyqtSignal
 from zametka_dbs.ui.styles import _THEME_VARS
-from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetricsF, QPen
+from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetricsF, QPen, QTextCursor
 
 from zametka_dbs.core.config import get_config
 
@@ -115,14 +115,14 @@ class LineGutter(QWidget):
                     typ = "blank" if is_blank else "normal"
                 active = n == self._current_line
 
-                block_layout = block.layout()
-                draw_y = top
-                line_h = height
+                cursor = QTextCursor(block)
+                cursor_rect = self._editor.cursorRect(cursor)
+                draw_y = cursor_rect.y() + 15
+                line_h = cursor_rect.height()
                 line_ascent = self._fmf.ascent()
+                block_layout = block.layout()
                 if block_layout and block_layout.lineCount() > 0:
                     line = block_layout.lineAt(0)
-                    draw_y = top + line.y() + 15
-                    line_h = line.height()
                     line_ascent = line.ascent()
 
                 if active:

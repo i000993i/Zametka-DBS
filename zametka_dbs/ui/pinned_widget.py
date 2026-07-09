@@ -136,7 +136,7 @@ class PinnedWidget(QWidget):
 
         self._clean_missing()
         self._load_pins()
-        get_bus().subscribe(Events.THEME_CHANGED, self._load_pins)
+        get_bus().subscribe(Events.THEME_CHANGED, lambda **_: self._load_pins())
 
     def _show_pin_menu(self):
         menu = QMenu(self)

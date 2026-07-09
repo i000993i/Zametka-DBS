@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
 from assets.icons import icon
 from zametka_dbs.core.config import get_config
+from zametka_dbs.core.event_bus import get_bus, Events
 
 from zametka_dbs.core.rust_bridge import HAS_RUST
 from zametka_dbs.core.rust_bridge import rust_detect_language as _rust_detect
@@ -135,6 +136,7 @@ class PinnedWidget(QWidget):
 
         self._clean_missing()
         self._load_pins()
+        get_bus().subscribe(Events.THEME_CHANGED, self._load_pins)
 
     def _show_pin_menu(self):
         menu = QMenu(self)

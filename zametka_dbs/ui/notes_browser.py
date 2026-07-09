@@ -251,6 +251,8 @@ class NotesBrowser(QWidget):
         self._scroll.setWidget(self._card_container)
         layout.addWidget(self._scroll)
 
+        get_bus().subscribe(Events.THEME_CHANGED, self._rebuild)
+
         self._rebuild()
 
     def _add_file_dialog(self):

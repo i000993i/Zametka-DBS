@@ -212,7 +212,6 @@ class MainWindow(QMainWindow):
         )
         self._ref_menu.setTitle(tr("menu.help"))
         self._act_handbook.setText(tr("menu.help.handbook"))
-        self._about_menu.setTitle(tr("menu.help.about"))
         self._act_about.setText(tr("menu.help.about_zametka"))
         self._act_update.setText(tr("menu.help.check_updates"))
 
@@ -581,15 +580,13 @@ class MainWindow(QMainWindow):
         self._act_handbook = QAction(tr("menu.help.handbook"), self)
         self._act_handbook.triggered.connect(self._open_handbook)
         self._ref_menu.addAction(self._act_handbook)
-
-        self._about_menu = mb.addMenu(tr("menu.help.about"))
+        self._ref_menu.addSeparator()
         self._act_about = QAction(tr("menu.help.about_zametka"), self)
         self._act_about.triggered.connect(self._show_about)
-        self._about_menu.addAction(self._act_about)
-        self._about_menu.addSeparator()
+        self._ref_menu.addAction(self._act_about)
         self._act_update = QAction(tr("menu.help.check_updates"), self)
         self._act_update.triggered.connect(self._check_updates)
-        self._about_menu.addAction(self._act_update)
+        self._ref_menu.addAction(self._act_update)
 
     def _show_about(self):
         from PyQt6.QtWidgets import QMessageBox

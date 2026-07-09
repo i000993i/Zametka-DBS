@@ -133,7 +133,7 @@ class LineGutter(QWidget):
                 if active:
                     hl = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
                     hl.setAlpha(10)
-                    painter.fillRect(QRectF(0, draw_y, self.width(), line_h), hl)
+                    painter.fillRect(QRectF(0, draw_y, self.width() - 1, line_h), hl)
 
                 if active:
                     c = QColor(_THEME_VARS["dark" if self._dark else "light"]["fg1"])
@@ -153,7 +153,7 @@ class LineGutter(QWidget):
                 txt = str(display_num) if typ != "blank" else ""
                 if txt:
                     text_w = self._fmf.horizontalAdvance(txt)
-                    x = self.width() - text_w - 8
+                    x = self.width() - text_w - 18
                     rect = QRectF(x, draw_y, text_w + 8, line_h)
                     painter.drawText(rect, int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), txt)
 

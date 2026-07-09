@@ -1,261 +1,95 @@
+from __future__ import annotations
+
 import os
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
-    QPushButton, QLabel, QMenu, QFileDialog, QDialog,
-    QListWidget, QListWidgetItem, QDialogButtonBox, QLineEdit,
-    QFrame
+    QPushButton, QLabel, QMenu, QFileDialog,
 )
-from PyQt6.QtGui import QAction, QPixmap, QPainter, QColor, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF
+from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 
 from assets.icons import icon
 from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.core.config import get_config
 from zametka_dbs.core.i18n import tr
-from zametka_dbs.ui.styles import _THEME_VARS
 from zametka_dbs.core.badges import (
-    BADGE_CATEGORIES, get_notes_list, add_note, remove_note,
-    detect_file_badges, get_assigned_badges, add_assigned_badge,
-    remove_assigned_badge, ALL_BADGES, badge_style, badge_stylesheet
+    get_notes_list, add_note, remove_note,
+    add_assigned_badge, remove_assigned_badge, get_assigned_badges,
 )
-
-
-class _BadgeItemWidget(QWidget):
-    def __init__(self, badge: dict):
-        super().__init__()
-        self._badge = badge
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 3, 8, 3)
-        layout.setSpacing(8)
-
-        cat = QLabel(badge["category"])
-        cat.setStyleSheet(f"color: {_THEME_VARS['dark']['fg2']}; font-size: 9px; font-weight: 600;")
-        cat.setFixedWidth(90)
-        layout.addWidget(cat)
-
-        bl = QLabel(badge["label"])
-        bl.setStyleSheet(badge_stylesheet(badge, font_size="10px"))
-        layout.addWidget(bl)
-        if badge_style(badge) == "pill":
-            dot = QLabel("●")
-            dot.setStyleSheet(f"color: {badge['color']}; font-size: 6px;")
-            layout.insertWidget(1, dot)
-        layout.addStretch()
-
-    def badge(self) -> dict:
-        return self._badge
-
-
-class _BadgeSelectDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr("notes.dialog.add_badge_title"))
-        self.setMinimumSize(420, 480)
-        self.resize(480, 560)
-        _current_theme = get_config().get("theme", "dark")
-        _v = _THEME_VARS[_current_theme]
-        self.setStyleSheet(f'background-color: {_v["bg1"]}; color: {_v["fg0"]};')
-        layout = QVBoxLayout(self)
-
-        self._search = QLineEdit()
-        self._search.setPlaceholderText(tr("notes.search_badges_placeholder"))
-        self._search.textChanged.connect(self._filter)
-        self._search.setStyleSheet(
-            f"background: {_v['bg2']}; border: 1px solid {_v['border']}; "
-            f"border-radius: 4px; padding: 5px 8px; color: {_v['fg0']}; font-size: 12px;"
-        )
-        layout.addWidget(self._search)
-
-        count_lbl = QLabel(f"{len(ALL_BADGES)} badges in {len(BADGE_CATEGORIES)} categories")
-        count_lbl.setStyleSheet(f"color: {_v['fg2']}; font-size: 10px; padding: 2px 0;")
-        layout.addWidget(count_lbl)
-
-        self._list = QListWidget()
-        self._list.setStyleSheet(
-            f"QListWidget {{ background: {_v['bg0']}; border: none; color: {_v['fg0']}; }}"
-            f"QListWidget::item {{ border-bottom: 1px solid {_v['border']}; }}"
-            f"QListWidget::item:selected {{ background: {_v['sel_bg']}; }}"
-            f"QListWidget::item:hover {{ background: {_v['bg2']}; }}"
-        )
-        self._list.setSpacing(1)
-        layout.addWidget(self._list)
-
-        btn_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        btn_box.setStyleSheet(f"color: {_v['fg0']}; padding: 4px;")
-        btn_box.accepted.connect(self.accept)
-        btn_box.rejected.connect(self.reject)
-        layout.addWidget(btn_box)
-
-        self._load_all()
-        self._selected_label: str | None = None
-
-    def _load_all(self, filter_text: str = ""):
-        self._list.clear()
-        ft = filter_text.lower()
-        for b in ALL_BADGES:
-            if ft and ft not in b["label"].lower() and ft not in b.get("category", "").lower():
-                continue
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, b["label"])
-            widget = _BadgeItemWidget(b)
-            item.setSizeHint(widget.sizeHint())
-            self._list.addItem(item)
-            self._list.setItemWidget(item, widget)
-        if self._list.count() > 0:
-            self._list.setCurrentRow(0)
-
-    def _filter(self, text: str):
-        self._load_all(text)
-
-    def selected_badge(self) -> dict | None:
-        item = self._list.currentItem()
-        if not item:
-            return None
-        label = item.data(Qt.ItemDataRole.UserRole)
-        for b in ALL_BADGES:
-            if b["label"] == label:
-                return b
-        return None
-
-
-class _NoteCard(QFrame):
-    clicked = pyqtSignal(str)
-
-    def __init__(self, filepath: str, parent=None):
-        super().__init__(parent)
-        self._filepath = filepath
-        self.setObjectName("note-card")
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._update_card_style()
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(4)
-
-        name = os.path.basename(filepath) or filepath
-        is_dir = os.path.isdir(filepath)
-
-        row1 = QHBoxLayout()
-        row1.setSpacing(6)
-
-        ico_label = QLabel()
-        if is_dir:
-            pix = icon("folder").pixmap(14, 14)
-        else:
-            ext = os.path.splitext(filepath)[1].lower()
-            if ext in (".md", ".mdx", ".txt"):
-                pix = icon("file-text").pixmap(14, 14)
-            else:
-                pix = icon("file").pixmap(14, 14)
-        ico_label.setPixmap(pix)
-        ico_label.setFixedWidth(18)
-        row1.addWidget(ico_label)
-
-        name_label = QLabel(name)
-        _v = _THEME_VARS['dark' if self._dark else 'light']
-        name_label.setStyleSheet(f"color: {_v['fg0']}; font-size: 12px; font-weight: 600;")
-        name_label.setWordWrap(False)
-        row1.addWidget(name_label, 1)
-        layout.addLayout(row1)
-
-        badges = []
-        badges.extend(detect_file_badges(filepath))
-        badges.extend(get_assigned_badges(filepath))
-
-        if badges:
-            row2 = QHBoxLayout()
-            row2.setSpacing(4)
-            row2.setContentsMargins(0, 0, 0, 0)
-            for b in badges[:6]:
-                bl = QLabel(b["label"])
-                bl.setStyleSheet(badge_stylesheet(b, font_size="9px"))
-                row2.addWidget(bl)
-            if len(badges) > 6:
-                more = QLabel(f"+{len(badges) - 6}")
-                _v = _THEME_VARS['dark' if self._dark else 'light']
-                more.setStyleSheet(f"color: {_v['fg2']}; font-size: 9px;")
-                row2.addWidget(more)
-            row2.addStretch()
-            layout.addLayout(row2)
-
-    def _update_card_style(self):
-        from zametka_dbs.core.config import get_config
-        self._dark = get_config().get("theme", "dark") == "dark"
-        _v = _THEME_VARS["dark" if self._dark else "light"]
-        self.setStyleSheet(
-            f"background-color: {_v['bg2']}; "
-            f"border: 1px solid {_v['border2']}; "
-            f"border-radius: 4px;"
-        )
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self._filepath)
-        super().mousePressEvent(event)
-
-    def filepath(self) -> str:
-        return self._filepath
+from zametka_dbs.ui.styles import _THEME_VARS
+from zametka_dbs.ui.badge_dialog import BadgeSelectDialog
+from zametka_dbs.ui.note_card import NoteCard
 
 
 class NotesBrowser(QWidget):
     open_note = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._dark: bool = get_config().get("theme", "dark") == "dark"
         self.setObjectName("notes-browser")
-        layout = QVBoxLayout(self)
+        layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        header = QWidget()
+        layout.addWidget(self._build_header())
+
+        scroll, card_container, card_layout = self._build_scroll_area()
+        self._scroll = scroll
+        self._card_container = card_container
+        self._card_layout = card_layout
+        layout.addWidget(self._scroll)
+
+        get_bus().subscribe(Events.THEME_CHANGED, lambda **_: self._rebuild())
+        self._rebuild()
+
+    def _build_header(self) -> QWidget:
+        header: QWidget = QWidget()
         header.setObjectName("notes-header")
         header.setFixedHeight(34)
-        header_layout = QHBoxLayout(header)
+        header_layout: QHBoxLayout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 0, 6, 0)
         header_layout.setSpacing(4)
 
-        header_icon = QLabel()
+        header_icon: QLabel = QLabel()
         header_icon.setPixmap(icon("layout").pixmap(12, 12))
         header_icon.setFixedWidth(16)
         header_layout.addWidget(header_icon)
 
-        header_label = QLabel(tr("notes.header"))
+        header_label: QLabel = QLabel(tr("notes.header"))
         header_label.setObjectName("notes-label")
         header_layout.addWidget(header_label)
 
         header_layout.addStretch()
 
-        self._add_file_btn = QPushButton(icon("file"), tr("notes.add_btn"))
+        self._add_file_btn: QPushButton = QPushButton(icon("file"), tr("notes.add_btn"))
         self._add_file_btn.setObjectName("notes-add-btn")
         self._add_file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_file_btn.setToolTip(tr("notes.add_tooltip"))
         self._add_file_btn.clicked.connect(self._add_file_dialog)
         header_layout.addWidget(self._add_file_btn)
 
-        layout.addWidget(header)
+        return header
 
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setObjectName("notes-scroll")
+    @staticmethod
+    def _build_scroll_area() -> tuple[QScrollArea, QWidget, QVBoxLayout]:
+        scroll: QScrollArea = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setObjectName("notes-scroll")
 
-        self._card_container = QWidget()
-        self._card_container.setObjectName("card-container")
-        self._card_layout = QVBoxLayout(self._card_container)
-        self._card_layout.setContentsMargins(6, 6, 6, 6)
-        self._card_layout.setSpacing(6)
-        self._card_layout.addStretch()
+        card_container: QWidget = QWidget()
+        card_container.setObjectName("card-container")
+        card_layout: QVBoxLayout = QVBoxLayout(card_container)
+        card_layout.setContentsMargins(6, 6, 6, 6)
+        card_layout.setSpacing(6)
+        card_layout.addStretch()
 
-        self._scroll.setWidget(self._card_container)
-        layout.addWidget(self._scroll)
+        scroll.setWidget(card_container)
+        return scroll, card_container, card_layout
 
-        get_bus().subscribe(Events.THEME_CHANGED, lambda **_: self._rebuild())
-
-        self._rebuild()
-
-    def _add_file_dialog(self):
+    def _add_file_dialog(self) -> None:
+        path: str
         path, _ = QFileDialog.getOpenFileName(
             self, tr("notes.dialog.add_title"), "", tr("notes.dialog.add_filter")
         )
@@ -263,21 +97,21 @@ class NotesBrowser(QWidget):
             add_note(path)
             self._rebuild()
 
-    def _rebuild(self):
+    def _rebuild(self) -> None:
         while self._card_layout.count() > 1:
             item = self._card_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         notes = get_notes_list()
         if not notes:
-            empty = QLabel(tr("notes.empty"))
+            empty: QLabel = QLabel(tr("notes.empty"))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            _v = _THEME_VARS["dark" if getattr(self, "_dark", True) else "light"]
+            _v: dict = _THEME_VARS["dark" if self._dark else "light"]
             empty.setStyleSheet(f"color: {_v['fg2']}; font-size: 11px; padding: 20px; background: transparent;")
             self._card_layout.insertWidget(0, empty)
             return
         for fp in notes:
-            card = _NoteCard(fp)
+            card: NoteCard = NoteCard(fp)
             card.clicked.connect(self._on_card_clicked)
             card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             card.customContextMenuRequested.connect(
@@ -285,21 +119,21 @@ class NotesBrowser(QWidget):
             )
             self._card_layout.insertWidget(self._card_layout.count() - 1, card)
 
-    def _on_card_clicked(self, filepath: str):
+    def _on_card_clicked(self, filepath: str) -> None:
         self.open_note.emit(filepath)
 
-    def _show_card_menu(self, pos, filepath: str):
-        menu = QMenu(self)
+    def _show_card_menu(self, pos: QPoint, filepath: str) -> None:
+        menu: QMenu = QMenu(self)
 
-        act_add_badge = QAction(tr("notes.context.add_badge"), self)
+        act_add_badge: QAction = QAction(tr("notes.context.add_badge"), self)
         act_add_badge.triggered.connect(lambda: self._add_badge_dialog(filepath))
         menu.addAction(act_add_badge)
 
-        act_remove_badge = QMenu(tr("notes.context.remove_badge"), self)
+        act_remove_badge: QMenu = QMenu(tr("notes.context.remove_badge"), self)
         assigned = get_assigned_badges(filepath)
         if assigned:
             for b in assigned:
-                act = QAction(b["label"], self)
+                act: QAction = QAction(b["label"], self)
                 act.triggered.connect(lambda _, l=b["label"]: self._remove_badge(filepath, l))
                 act_remove_badge.addAction(act)
         else:
@@ -308,27 +142,27 @@ class NotesBrowser(QWidget):
 
         menu.addSeparator()
 
-        act_remove = QAction(tr("notes.context.remove_from_notes"), self)
+        act_remove: QAction = QAction(tr("notes.context.remove_from_notes"), self)
         act_remove.triggered.connect(lambda: self._remove_note(filepath))
         menu.addAction(act_remove)
 
         menu.exec(self._card_container.mapToGlobal(pos))
 
-    def _add_badge_dialog(self, filepath: str):
-        dlg = _BadgeSelectDialog(self)
+    def _add_badge_dialog(self, filepath: str) -> None:
+        dlg: BadgeSelectDialog = BadgeSelectDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            badge = dlg.selected_badge()
+            badge: dict | None = dlg.selected_badge()
             if badge:
                 add_assigned_badge(filepath, badge)
                 self._rebuild()
 
-    def _remove_badge(self, filepath: str, label: str):
+    def _remove_badge(self, filepath: str, label: str) -> None:
         remove_assigned_badge(filepath, label)
         self._rebuild()
 
-    def _remove_note(self, filepath: str):
+    def _remove_note(self, filepath: str) -> None:
         remove_note(filepath)
         self._rebuild()
 
-    def refresh(self):
+    def refresh(self) -> None:
         self._rebuild()

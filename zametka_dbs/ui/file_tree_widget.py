@@ -1,70 +1,15 @@
+from __future__ import annotations
+
 import os
 import subprocess
 
-from PyQt6.QtWidgets import QTreeView, QMenu, QStyle, QProxyStyle, QFileIconProvider
-from PyQt6.QtGui import QFileSystemModel, QStandardItemModel, QAction, QPen, QColor, QIcon
-from PyQt6.QtCore import Qt, QDir, QModelIndex, pyqtSignal, QSortFilterProxyModel, QPoint, QPointF, QSize
+from PyQt6.QtWidgets import QTreeView, QMenu
+from PyQt6.QtGui import QFileSystemModel, QStandardItemModel, QAction
+from PyQt6.QtCore import Qt, QDir, QModelIndex, pyqtSignal, QPoint, QSize
 
 from zametka_dbs.core.event_bus import get_bus, Events
-from zametka_dbs.ui.styles import _THEME_VARS
-from assets.icons import icon
-
-_HIDDEN_PATTERNS = {
-    ".git", "node_modules", ".obsidian", ".trash",
-    ".DS_Store", "thumbs.db", ".vscode", ".idea",
-    "__pycache__", ".venv", ".env",
-}
-
-_FILE_ICONS = {
-    ".py": ("Python", "#9d7cd8"),
-    ".pyw": ("Python", "#9d7cd8"),
-    ".js": ("JavaScript", "#f0db4f"),
-    ".mjs": ("JavaScript", "#f0db4f"),
-    ".cjs": ("JavaScript", "#f0db4f"),
-    ".jsx": ("JavaScript", "#f0db4f"),
-    ".ts": ("TypeScript", "#3178c6"),
-    ".tsx": ("TypeScript", "#3178c6"),
-    ".html": ("HTML", "#e34f26"),
-    ".htm": ("HTML", "#e34f26"),
-    ".css": ("CSS", "#1572b6"),
-    ".scss": ("CSS", "#1572b6"),
-    ".sass": ("CSS", "#1572b6"),
-    ".less": ("CSS", "#1572b6"),
-    ".java": ("Java", "#b07219"),
-    ".c": ("C", "#555555"),
-    ".cpp": ("C++", "#f34b7d"),
-    ".h": ("C", "#555555"),
-    ".hpp": ("C++", "#f34b7d"),
-    ".cc": ("C++", "#f34b7d"),
-    ".cxx": ("C++", "#f34b7d"),
-    ".cs": ("C#", "#178600"),
-    ".go": ("Go", "#00add8"),
-    ".rs": ("Rust", "#dea584"),
-    ".sql": ("SQL", "#e38c00"),
-    ".rb": ("Ruby", "#701516"),
-    ".php": ("PHP", "#4f5d95"),
-    ".swift": ("Swift", "#f05138"),
-    ".kt": ("Kotlin", "#7f52ff"),
-    ".kts": ("Kotlin", "#7f52ff"),
-    ".dart": ("Dart", "#00d2b8"),
-    ".lua": ("Lua", "#000080"),
-    ".sh": ("Shell", "#4eaa25"),
-    ".bash": ("Shell", "#4eaa25"),
-    ".zsh": ("Shell", "#4eaa25"),
-    ".ps1": ("PowerShell", "#012456"),
-    ".psm1": ("PowerShell", "#012456"),
-    ".yaml": ("YAML", "#cb171e"),
-    ".yml": ("YAML", "#cb171e"),
-    ".toml": ("TOML", "#9c4221"),
-    ".json": ("JSON", "#292929"),
-    ".ini": ("INI", "#808080"),
-    ".cfg": ("INI", "#808080"),
-    ".md": ("Markdown", "#083fa1"),
-    ".mdx": ("Markdown", "#083fa1"),
-    ".txt": ("Text", "#808080"),
-}
-
-_TEXT_EXTS = {".md", ".mdx", ".txt"}
+from zametka_dbs.ui.tree_style import TreeBranchStyle
+from zametka_dbs.ui.file_filter_proxy import FileFilterProxy, NullIconProvider
 
 
 def _open_with_notepad(path: str):
@@ -77,123 +22,10 @@ def _open_file_location(path: str):
     subprocess.Popen(["explorer.exe", "/select,", os.path.normpath(path)])
 
 
-class _TreeBranchStyle(QProxyStyle):
-    def drawPrimitive(self, element, option, painter, widget):
-        if element == QStyle.PrimitiveElement.PE_IndicatorBranch:
-            rect = option.rect
-            x = rect.x() + rect.width() // 2
-            y_top = rect.top()
-            y_bot = rect.bottom()
-            y_mid = rect.center().y()
-            has_sibling = bool(option.state & QStyle.StateFlag.State_Sibling)
-            has_children = bool(option.state & QStyle.StateFlag.State_Children)
-
-            painter.save()
-            dark = getattr(widget, '_dark', True) if widget else True
-            v = _THEME_VARS["dark" if dark else "light"]
-            painter.setPen(QPen(QColor(v["border2"]), 1))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-
-            if has_sibling:
-                painter.drawLine(x, y_top, x, y_bot)
-            else:
-                painter.drawLine(x, y_top, x, y_mid)
-
-            painter.drawLine(x, y_mid, rect.right(), y_mid)
-
-            if has_children:
-                cx, cy = float(x), float(y_mid)
-                h = 4.0
-                w = 4.0
-                if option.state & QStyle.StateFlag.State_Open:
-                    tri = [QPointF(cx, cy - h), QPointF(cx - w, cy + h), QPointF(cx + w, cy + h)]
-                else:
-                    tri = [QPointF(cx - w, cy - h), QPointF(cx - w, cy + h), QPointF(cx + w, cy)]
-                painter.setPen(Qt.PenStyle.NoPen)
-                v = _THEME_VARS["dark" if dark else "light"]
-                painter.setBrush(QColor(v["fg1"]))
-                painter.drawPolygon(*tri)
-
-            painter.restore()
-            return
-        super().drawPrimitive(element, option, painter, widget)
-
-
-class _FileFilterProxy(QSortFilterProxyModel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._expanded = set()
-        self._filter_text = ""
-
-    def set_filter_text(self, text: str):
-        self._filter_text = text.lower()
-        self.invalidateFilter()
-
-    def set_expanded(self, path, state):
-        if state:
-            self._expanded.add(path)
-        else:
-            self._expanded.discard(path)
-
-    def columnCount(self, parent=None):
-        return 1
-
-    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        model = self.sourceModel()
-        index = model.index(source_row, 0, source_parent)
-        if not index.isValid():
-            return True
-        name = model.fileName(index)
-        if name in _HIDDEN_PATTERNS or name.startswith("."):
-            return False
-        if self._filter_text:
-            if self._filter_text not in name.lower():
-                if model.isDir(index):
-                    for i in range(model.rowCount(index)):
-                        if self._filter_children_recursive(model, i, index):
-                            return True
-                return False
-        return True
-
-    def _filter_children_recursive(self, model, row, parent) -> bool:
-        idx = model.index(row, 0, parent)
-        if not idx.isValid():
-            return False
-        name = model.fileName(idx)
-        if self._filter_text in name.lower():
-            return True
-        if model.isDir(idx):
-            for i in range(model.rowCount(idx)):
-                if self._filter_children_recursive(model, i, idx):
-                    return True
-        return False
-
-    def data(self, index, role):
-        if role == Qt.ItemDataRole.DecorationRole:
-            src = self.mapToSource(index)
-            path = self.sourceModel().filePath(src)
-            if os.path.isdir(path):
-                ico = "folder-open" if path in self._expanded else "folder"
-                return icon(ico, "#888888", hover_color="#bbbbbb")
-            ext = os.path.splitext(path)[1].lower()
-            info = _FILE_ICONS.get(ext)
-            if info:
-                _, color = info
-                base = "file-text" if ext in _TEXT_EXTS else "file"
-                return icon(base, color, hover_color="#eeeeee")
-            return icon("file", "#808080")
-        return super().data(index, role)
-
-
-class _NullIconProvider(QFileIconProvider):
-    def icon(self, info_or_type):
-        return QIcon()
-
-
 class FileTreeWidget(QTreeView):
-    file_opened = pyqtSignal(str)
+    file_opened: pyqtSignal = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.bus = get_bus()
         self._vault_root_set = False
@@ -203,17 +35,17 @@ class FileTreeWidget(QTreeView):
         self.setModel(self._placeholder)
 
         self._source_model = QFileSystemModel()
-        self._source_model.setIconProvider(_NullIconProvider())
+        self._source_model.setIconProvider(NullIconProvider())
         self._source_model.setFilter(
             QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot
         )
         self._source_model.setNameFilters([])
         self._source_model.setNameFilterDisables(False)
 
-        self._proxy = _FileFilterProxy()
+        self._proxy = FileFilterProxy()
         self._proxy.setSourceModel(self._source_model)
 
-        self.setStyle(_TreeBranchStyle())
+        self.setStyle(TreeBranchStyle())
         self.setAnimated(True)
         self.setIndentation(20)
         self.setHeaderHidden(True)
@@ -246,7 +78,7 @@ class FileTreeWidget(QTreeView):
         self.setModel(self._placeholder)
         self._vault_root_set = False
 
-    def navigate_to_folder(self, folder_path: str):
+    def navigate_to_folder(self, folder_path: str) -> None:
         if not os.path.isdir(folder_path):
             return
         src_idx = self._source_model.index(folder_path)
@@ -261,7 +93,7 @@ class FileTreeWidget(QTreeView):
         self.setExpandsOnDoubleClick(True)
         self.expand(proxy_idx)
 
-    def set_vault_path(self, vault_path: str):
+    def set_vault_path(self, vault_path: str) -> None:
         if not vault_path or not os.path.isdir(vault_path):
             return
         self._source_model.setRootPath(vault_path)
@@ -308,22 +140,33 @@ class FileTreeWidget(QTreeView):
         menu = QMenu(self)
 
         if is_file:
-            act_open = QAction("Open with Zametka", self)
-            act_open.triggered.connect(lambda: self.file_opened.emit(path))
-            menu.addAction(act_open)
-
+            self._add_open_actions(menu, path)
             menu.addSeparator()
 
-            act_notepad = QAction("Open with Notepad", self)
-            act_notepad.triggered.connect(lambda: _open_with_notepad(path))
-            menu.addAction(act_notepad)
+        self._add_new_actions(menu, path, is_file)
+        menu.addSeparator()
 
-            act_default = QAction("Open with system default", self)
-            act_default.triggered.connect(lambda: _open_with_default(path))
-            menu.addAction(act_default)
+        self._add_file_actions(menu, path, is_file)
+        menu.addSeparator()
 
-            menu.addSeparator()
+        self._add_location_actions(menu, path, is_file)
 
+        menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _add_open_actions(self, menu: QMenu, path: str):
+        act_open = QAction("Open with Zametka", self)
+        act_open.triggered.connect(lambda: self.file_opened.emit(path))
+        menu.addAction(act_open)
+
+        act_notepad = QAction("Open with Notepad", self)
+        act_notepad.triggered.connect(lambda: _open_with_notepad(path))
+        menu.addAction(act_notepad)
+
+        act_default = QAction("Open with system default", self)
+        act_default.triggered.connect(lambda: _open_with_default(path))
+        menu.addAction(act_default)
+
+    def _add_new_actions(self, menu: QMenu, path: str, is_file: bool):
         parent_dir = os.path.dirname(path) if is_file else path
         act_new_file = QAction("New File", self)
         act_new_file.triggered.connect(lambda: self._new_file(parent_dir))
@@ -333,8 +176,7 @@ class FileTreeWidget(QTreeView):
         act_new_folder.triggered.connect(lambda: self._new_folder(parent_dir))
         menu.addAction(act_new_folder)
 
-        menu.addSeparator()
-
+    def _add_file_actions(self, menu: QMenu, path: str, is_file: bool):
         act_rename = QAction("Rename", self)
         act_rename.triggered.connect(lambda: self._rename_item(path))
         menu.addAction(act_rename)
@@ -343,8 +185,7 @@ class FileTreeWidget(QTreeView):
         act_delete.triggered.connect(lambda: self._delete_item(path, is_file))
         menu.addAction(act_delete)
 
-        menu.addSeparator()
-
+    def _add_location_actions(self, menu: QMenu, path: str, is_file: bool):
         if is_file:
             act_move_to = QAction("Move to folder", self)
             act_move_to.triggered.connect(lambda: self._move_to_folder(path))
@@ -353,8 +194,6 @@ class FileTreeWidget(QTreeView):
         act_explorer = QAction("Open file location", self)
         act_explorer.triggered.connect(lambda: _open_file_location(path))
         menu.addAction(act_explorer)
-
-        menu.exec(self.viewport().mapToGlobal(pos))
 
     def _new_file(self, parent_dir: str):
         from PyQt6.QtWidgets import QInputDialog

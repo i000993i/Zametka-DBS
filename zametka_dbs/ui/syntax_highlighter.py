@@ -1,4 +1,8 @@
+from __future__ import annotations
+
+import json
 import re
+from pathlib import Path
 
 from PyQt6.QtGui import (
     QSyntaxHighlighter, QTextCharFormat, QFont, QColor,
@@ -7,182 +11,90 @@ from PyQt6.QtGui import (
 from zametka_dbs.core.config import get_config
 
 
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+with open(_DATA_DIR / "syntax_colors.json", encoding="utf-8") as _f:
+    _SYNTAX_COLORS: dict[str, dict[str, str]] = json.load(_f)
+_LIGHT_COLORS: dict[str, str] = _SYNTAX_COLORS["light"]
+_DARK_COLORS: dict[str, str] = _SYNTAX_COLORS["dark"]
+
+
 class MarkdownHighlighter(QSyntaxHighlighter):
-    """
-    QSyntaxHighlighter for Markdown syntax.
-
-    Highlights:
-      - Headings h1-h6
-      - Bold, italic, strikethrough, highlight
-      - Inline code and fenced code blocks (multi-block state)
-      - Links, wikilinks, images
-      - Lists, blockquotes, horizontal rules
-      - Tags (#tag), inline math ($...$)
-      - Callouts (> [!type])
-
-    Uses QSyntaxHighlighter's built-in block state for multi-line
-    code fences and blockquotes.
-    """
-
-    # Block states
     NORMAL = 0
     CODE_FENCE = 1
-    CODE_INDENTED = 2
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: object | None = None) -> None:
         super().__init__(parent)
         config = get_config()
-        size = config.get("editor.font_size", 14)
-        self._dark = config.get("theme", "dark") == "dark"
+        size: int = config.get("editor.font_size", 14)
+        self._size: int = size
+        self._dark: bool = True
 
-        # Define formats once
-        self._formats = self._build_formats(size)
-        # Compile regex rules
-        self._rules = self._build_rules()
+        self._formats: dict[str, QTextCharFormat] = self._build_formats(size)
+        self._rules: list[tuple[re.Pattern, str]] = self._compile_rules()
 
-    def set_theme(self, dark: bool):
-        self._dark = dark
-        self._formats = self._build_formats(self._formats.get("_size", 14))
-        self.rehighlight()
-
-    def _build_formats(self, size: int) -> dict:
-        base_size = size
-        d = self._dark
-
-        def c(dark_c, light_c):
-            return dark_c if d else light_c
-
-        def fmt(color, bold=False, italic=False, size_off=0, bg=None):
-            f = QTextCharFormat()
-            f.setForeground(QColor(color))
+    def _build_formats(self, size: int) -> dict[str, QTextCharFormat]:
+        def fmt(color: str, bold: bool = False, italic: bool = False, mono: bool = False) -> QTextCharFormat:
+            f: QTextCharFormat = QTextCharFormat()
+            c: QColor = QColor(color)
+            f.setForeground(c)
             if bold:
                 f.setFontWeight(QFont.Weight.Bold)
             if italic:
                 f.setFontItalic(True)
-            if size_off:
-                f.setFontPointSize(base_size + size_off)
-            if bg:
-                f.setBackground(QColor(bg))
+            if mono:
+                f.setFontFixedPitch(True)
+                f.setFontPointSize(size - 2)
             return f
 
-        return {
-            "_size": size,
-            "h1": fmt(c("#9d7cd8", "#7c5bbf"), bold=True, size_off=4),
-            "h2": fmt(c("#9d7cd8", "#7c5bbf"), bold=True, size_off=2),
-            "h3": fmt(c("#9d7cd8", "#7c5bbf"), bold=True),
-            "h4": fmt(c("#e5c07b", "#b8943d"), bold=True),
-            "h5": fmt(c("#808080", "#999999"), bold=True),
-            "h6": fmt(c("#808080", "#999999"), bold=True),
-            "bold": fmt(c("#f5a742", "#c47f1a"), bold=True),
-            "italic": fmt(c("#e5c07b", "#b8943d"), italic=True),
-            "bold_italic": fmt(c("#f5a742", "#c47f1a"), bold=True, italic=True),
-            "code": fmt(c("#7fd88f", "#3a8f4a"), bg=c("rgba(127, 216, 143, 0.08)", "rgba(58, 143, 74, 0.12)")),
-            "code_fence": fmt(c("#7fd88f", "#3a8f4a"), bg=c("rgba(127, 216, 143, 0.04)", "rgba(58, 143, 74, 0.06)")),
-            "link": fmt(c("#fab283", "#c4713e")),
-            "wikilink": fmt(c("#fab283", "#c4713e"), bg=c("rgba(250, 178, 131, 0.08)", "rgba(196, 113, 62, 0.12)")),
-            "image": fmt(c("#56b6c2", "#2d7d87")),
-            "list": fmt(c("#fab283", "#c4713e")),
-            "blockquote": fmt(c("#808080", "#999999")),
-            "tag": fmt(c("#7fd88f", "#3a8f4a"), bg=c("rgba(127, 216, 143, 0.10)", "rgba(58, 143, 74, 0.14)")),
-            "strikethrough": fmt(c("#808080", "#999999")),
-            "highlight": fmt(c("#eeeeee", "#333333"), bg=c("rgba(245, 167, 66, 0.20)", "rgba(196, 127, 26, 0.15)")),
-            "math": fmt(c("#56b6c2", "#2d7d87")),
-            "hr": fmt(c("#2a2a2a", "#cccccc")),
-            "callout": fmt(c("#fab283", "#c4713e"), bg=c("rgba(250, 178, 131, 0.04)", "rgba(196, 113, 62, 0.06)")),
-        }
+        colors: dict = _DARK_COLORS if self._dark else _LIGHT_COLORS
+        return {k: fmt(v) for k, v in colors.items()}
 
-    def _build_rules(self) -> list:
+    def _compile_rules(self) -> list[tuple[re.Pattern, str]]:
         return [
-            # ── Headings (must be at start of line) ──
-            (re.compile(r"^#{6}\s+.*$"), "h6"),
-            (re.compile(r"^#{5}\s+.*$"), "h5"),
-            (re.compile(r"^#{4}\s+.*$"), "h4"),
-            (re.compile(r"^#{3}\s+.*$"), "h3"),
-            (re.compile(r"^#{2}\s+.*$"), "h2"),
-            (re.compile(r"^#{1}\s+.*$"), "h1"),
-
-            # ── Callouts > [!type] ──
-            (re.compile(r"^>\s*\[!.+\].*$"), "callout"),
-
-            # ── Blockquotes ──
-            (re.compile(r"^>.*$"), "blockquote"),
-
-            # ── Horizontal rules ──
-            (re.compile(r"^[-*_]{3,}\s*$"), "hr"),
-
-            # ── List markers ──
-            (re.compile(r"^(\s*[-*+]\s|^\s*\d+\.\s)"), "list"),
-
-            # ── Inline math ──
-            (re.compile(r"\$[^$]+\$"), "math"),
-
-            # ── Wikilinks [[...]] ──
-            (re.compile(r"\[\[.+?\]\]"), "wikilink"),
-
-            # ── Images ![alt](url) ──
-            (re.compile(r"!\[.*?\]\(.*?\)"), "image"),
-
-            # ── Links [text](url) ──
-            (re.compile(r"\[.*?\]\(.*?\)"), "link"),
-
-            # ── Strikethrough ~~text~~ ──
-            (re.compile(r"~~.+?~~"), "strikethrough"),
-
-            # ── Highlight ==text== ──
-            (re.compile(r"==.+?=="), "highlight"),
-
-            # ── Bold+Italic ***text*** ──
-            (re.compile(r"\*\*\*.+?\*\*\*"), "bold_italic"),
-
-            # ── Bold **text** or __text__ ──
-            (re.compile(r"\*\*.+?\*\*"), "bold"),
-            (re.compile(r"__(.+?)__"), "bold"),
-
-            # ── Italic *text* or _text_ ──
+            (re.compile(r"^#{1,6}\s+.*$"), "h1"),
+            (re.compile(r"\*\*(.+?)\*\*"), "bold"),
             (re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"), "italic"),
-            (re.compile(r"(?<!_)_(?!_)(.+?)(?<!_)_(?!_)"), "italic"),
-
-            # ── Inline code `text` ──
-            (re.compile(r"`[^`]+?`"), "code"),
-
-            # ── Tags #tag (word boundary) ──
-            (re.compile(r"#[\w\-/]+"), "tag"),
+            (re.compile(r"~~(.+?)~~"), "strikethrough"),
+            (re.compile(r"==(.+?)=="), "highlight"),
+            (re.compile(r"`([^`]+)`"), "code"),
+            (re.compile(r"\[([^\]]+)\]\(([^)]+)\)"), "link"),
+            (re.compile(r"!\[([^\]]*)\]\(([^)]+)\)"), "image"),
+            (re.compile(r"^(\s*[-*+]\s)"), "list"),
+            (re.compile(r"^(\s*>\s)"), "blockquote"),
+            (re.compile(r"^(\s*---\s*)$"), "hr"),
+            (re.compile(r"(?<!`)#(\w[\w-]*)"), "tag"),
+            (re.compile(r"\$\$(.+?)\$\$"), "math"),
+            (re.compile(r"\$([^\$]+)\$"), "math"),
+            (re.compile(r"\[\[([^\]]+)\]\]"), "wikilink"),
+            (re.compile(r"^> \[!(?:\w+)\]"), "callout"),
         ]
 
-    def highlightBlock(self, text: str):
-        block_state = self.previousBlockState()
+    def set_theme(self, dark: bool) -> None:
+        self._dark = dark
+        self._formats = self._build_formats(self._size)
+        self.rehighlight()
 
-        # ── Handle fenced code blocks ──
-        stripped = text.strip()
-        if block_state == self.CODE_FENCE:
-            if stripped.startswith(("```", "~~~")):
-                self.setCurrentBlockState(self.NORMAL)
-                self._apply_format(0, len(text), "code_fence")
-                return
-            self.setCurrentBlockState(self.CODE_FENCE)
-            self._apply_format(0, len(text), "code_fence")
+    def highlightBlock(self, text: str) -> None:
+        if self._dark is None:
             return
-        else:
-            if stripped.startswith(("```", "~~~")):
-                fence = stripped[:3]
-                if stripped.count(fence) == 2 and len(stripped) > 3:
-                    self.setCurrentBlockState(self.NORMAL)
-                else:
-                    self.setCurrentBlockState(self.CODE_FENCE)
-                self._apply_format(0, len(text), "code_fence")
-                return
+        if self.previousBlockState() == self.CODE_FENCE:
+            self._highlight_code_fence(text)
+            return
 
-        self.setCurrentBlockState(self.NORMAL)
-
-        # ── Apply inline rules ──
-        for pattern, fmt_key in self._rules:
+        for pattern, key in self._rules:
             for match in pattern.finditer(text):
-                start = match.start()
-                length = match.end() - start
-                self._apply_format(start, length, fmt_key, text)
+                start: int = match.start()
+                end: int = match.end()
+                fmt: QTextCharFormat = self._formats.get(key, QTextCharFormat())
+                self.setFormat(start, end - start, fmt)
 
-    def _apply_format(self, start: int, length: int, fmt_key: str, text: str = ""):
-        fmt = self._formats.get(fmt_key)
-        if fmt is None:
-            return
-        self.setFormat(start, length, fmt)
+        if text.strip().startswith("```"):
+            self.setCurrentBlockState(self.CODE_FENCE)
+            fmt = self._formats.get("code", QTextCharFormat())
+            self.setFormat(0, len(text), fmt)
+
+    def _highlight_code_fence(self, text: str) -> None:
+        fmt = self._formats.get("code", QTextCharFormat())
+        self.setFormat(0, len(text), fmt)
+        if text.strip().startswith("```"):
+            self.setCurrentBlockState(self.NORMAL)

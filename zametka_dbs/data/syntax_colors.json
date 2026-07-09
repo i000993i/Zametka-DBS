@@ -1,0 +1,26 @@
+{
+  "light": {
+    "h1": "#8250df", "h2": "#8250df", "h3": "#8250df",
+    "h4": "#8250df", "h5": "#8250df", "h6": "#8250df",
+    "bold": "#000000", "italic": "#000000",
+    "strikethrough": "#6e7781", "highlight": "#f0db4f",
+    "code": "#1a7f37", "code_bg": "#f0f0f0",
+    "link": "#0550ae", "image": "#0550ae",
+    "list": "#0550ae", "blockquote": "#6e7781",
+    "hr": "#d0d7de", "tag": "#cf222e",
+    "math": "#0550ae", "wikilink": "#0550ae",
+    "callout": "#9a6700"
+  },
+  "dark": {
+    "h1": "#9d7cd8", "h2": "#9d7cd8", "h3": "#9d7cd8",
+    "h4": "#9d7cd8", "h5": "#9d7cd8", "h6": "#9d7cd8",
+    "bold": "#ffffff", "italic": "#ffffff",
+    "strikethrough": "#8b949e", "highlight": "#f0db4f",
+    "code": "#7fd88f", "code_bg": "#0d1117",
+    "link": "#58a6ff", "image": "#58a6ff",
+    "list": "#58a6ff", "blockquote": "#8b949e",
+    "hr": "#30363d", "tag": "#ff7b72",
+    "math": "#58a6ff", "wikilink": "#58a6ff",
+    "callout": "#d29922"
+  }
+}

@@ -1,22 +1,23 @@
+from __future__ import annotations
+
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QPushButton
 from PyQt6.QtCore import Qt, QSize
 from assets.icons import icon
 
 
 class ActivityBar(QFrame):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setObjectName("activity-bar")
         self.setFixedWidth(48)
-        layout = QVBoxLayout(self)
+        layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(2)
 
-        self._buttons = []
-        self._current = None
+        self._buttons: list[QPushButton] = []
 
     def add_button(self, icon_name: str, tooltip: str) -> QPushButton:
-        btn = QPushButton()
+        btn: QPushButton = QPushButton()
         btn.setIcon(icon(icon_name))
         btn.setIconSize(QSize(20, 20))
         btn.setObjectName("activity-btn")
@@ -28,14 +29,10 @@ class ActivityBar(QFrame):
         self._buttons.append(btn)
         return btn
 
-    def set_active(self, index: int):
+    def set_active(self, index: int) -> None:
         for i, btn in enumerate(self._buttons):
             btn.setChecked(i == index)
 
-    def set_button_tooltip(self, index: int, tooltip: str):
+    def set_button_tooltip(self, index: int, tooltip: str) -> None:
         if 0 <= index < len(self._buttons):
             self._buttons[index].setToolTip(tooltip)
-
-    def select(self, button: QPushButton):
-        for b in self._buttons:
-            b.setChecked(b is button)

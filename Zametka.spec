@@ -19,12 +19,6 @@ if _rust_pkg.exists():
         if f.suffix in (".pyd", ".dll"):
             _rust_binaries.append((str(f), "zametka_core"))
 
-_conpty_pkg = _venv_site / "zametka_conpty"
-if _conpty_pkg.exists():
-    for f in _conpty_pkg.iterdir():
-        if f.suffix in (".pyd", ".dll"):
-            _rust_binaries.append((str(f), "zametka_conpty"))
-
 a = Analysis(
     ["app.py"],
     pathex=[str(ROOT)],
@@ -39,7 +33,6 @@ a = Analysis(
         "watchdog.observers",
         "watchdog.observers.read_directory_changes",
         "zametka_core",
-        "zametka_conpty",
         "linkify_it",
     ],
     hookspath=[],

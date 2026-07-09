@@ -6,7 +6,7 @@ import traceback
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 
-from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.core.event_bus import get_bus
 from zametka_dbs.core.config import get_config
 from zametka_dbs.ui.main_window import MainWindow
 

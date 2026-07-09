@@ -147,7 +147,8 @@ def the_stylesheet(theme: str = "dark") -> str:
             color: {v["fg0"]};
             border: none;
             font-size: 14px;
-            selection-background-color: #264f78;
+            selection-background-color: {v["sel_bg"]};
+            selection-color: {v["fg0"]};
         }}
         QPlainTextEdit#editor-pane QScrollBar:vertical {{
             width: 8px;
@@ -377,7 +378,8 @@ def the_stylesheet(theme: str = "dark") -> str:
             border: none;
             font-size: 14px;
             padding: 16px;
-            selection-background-color: #264f78;
+            selection-background-color: {v["sel_bg"]};
+            selection-color: {v["fg0"]};
         }}
         QScrollArea#preview-scroll {{
             background-color: {v["bg0"]};

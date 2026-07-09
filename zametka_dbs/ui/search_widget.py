@@ -1,151 +1,146 @@
+from __future__ import annotations
+
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-    QListWidget, QListWidgetItem, QLabel, QPushButton,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QLabel,
+    QPushButton,
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from assets.icons import icon
-from zametka_dbs.search.engine import SearchEngine
-from zametka_dbs.core.i18n import tr
 
 
 class SearchWidget(QWidget):
-    """
-    Search panel with input field, replace field, and results list.
-
-    - Debounced search (300ms after typing stops)
-    - Shows filename, title, snippet, score
-    - Click result → emits file path
-    - Replace button → emits (find, replace) for current file
-    """
-
     result_clicked = pyqtSignal(str)
-    search_requested = pyqtSignal(str)
     replace_requested = pyqtSignal(str, str)
 
-    def __init__(self, engine: SearchEngine, parent=None):
+    def __init__(self, engine: object, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("search-widget")
         self._engine = engine
+        self._timer: QTimer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._do_search)
 
-        layout = QVBoxLayout(self)
+        layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
-        header = QWidget()
-        header.setObjectName("search-header")
-        header.setFixedHeight(28)
-        hdr_layout = QHBoxLayout(header)
-        hdr_layout.setContentsMargins(10, 0, 14, 0)
-        hdr_layout.setSpacing(4)
-        hdr_icon = QLabel()
-        hdr_icon.setPixmap(icon("search").pixmap(12, 12))
-        hdr_icon.setFixedWidth(16)
-        hdr_layout.addWidget(hdr_icon)
-        hdr_text = QLabel(tr("search.header"))
-        hdr_text.setObjectName("search-header-label")
-        hdr_layout.addWidget(hdr_text)
-        hdr_layout.addStretch()
-        layout.addWidget(header)
+        layout.addWidget(self._build_header())
+        layout.addWidget(self._build_inputs())
+        layout.addLayout(self._build_buttons())
 
-        # Search input
-        self._input = QLineEdit()
-        self._input.setObjectName("search-input")
-        self._input.setPlaceholderText(tr("search.placeholder"))
-        self._input.setClearButtonEnabled(True)
-        layout.addWidget(self._input)
-
-        # Replace input + button
-        replace_row = QWidget()
-        replace_row.setObjectName("replace-row")
-        replace_layout = QHBoxLayout(replace_row)
-        replace_layout.setContentsMargins(8, 2, 8, 2)
-        replace_layout.setSpacing(4)
-
-        self._replace_input = QLineEdit()
-        self._replace_input.setObjectName("replace-input")
-        self._replace_input.setPlaceholderText(tr("search.replace_placeholder"))
-        replace_layout.addWidget(self._replace_input, 1)
-
-        self._replace_btn = QPushButton(tr("search.replace_all"))
-        self._replace_btn.setObjectName("replace-btn")
-        self._replace_btn.setFixedHeight(24)
-        self._replace_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._replace_btn.clicked.connect(self._on_replace)
-        replace_layout.addWidget(self._replace_btn)
-
-        layout.addWidget(replace_row)
-
-        # Results
-        self._results = QListWidget()
+        self._results: QListWidget = QListWidget()
         self._results.setObjectName("search-results")
-        self._results.setFrameShape(QListWidget.Shape.NoFrame)
         self._results.itemClicked.connect(self._on_item_clicked)
-        layout.addWidget(self._results)
+        layout.addWidget(self._results, 1)
 
-        # Debounce
-        self._timer = QTimer()
-        self._timer.setSingleShot(True)
-        self._timer.setInterval(300)
-        self._timer.timeout.connect(self._do_search)
+    def _build_header(self) -> QWidget:
+        header: QWidget = QWidget()
+        header.setObjectName("sidebar-header")
+        header.setFixedHeight(30)
+        hdr: QHBoxLayout = QHBoxLayout(header)
+        hdr.setContentsMargins(10, 0, 10, 0)
+        hdr_icon: QLabel = QLabel()
+        hdr_icon.setPixmap(icon("search").pixmap(14, 14))
+        hdr_icon.setFixedWidth(18)
+        hdr.addWidget(hdr_icon)
+        hdr_label: QLabel = QLabel("SEARCH")
+        hdr_label.setObjectName("vault-label")
+        hdr.addWidget(hdr_label)
+        hdr.addStretch()
+        return header
 
+    def _build_inputs(self) -> QWidget:
+        container: QWidget = QWidget()
+        cl: QVBoxLayout = QVBoxLayout(container)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+
+        self._input: QLineEdit = QLineEdit()
+        self._input.setObjectName("search-input")
+        self._input.setPlaceholderText("Search files...")
+        self._input.setClearButtonEnabled(True)
+        self._input.setFixedHeight(28)
         self._input.textChanged.connect(self._on_text_changed)
+        cl.addWidget(self._input)
 
-    def _on_text_changed(self, text: str):
-        self._timer.stop()
-        self._timer.start()
+        self._replace_input: QLineEdit = QLineEdit()
+        self._replace_input.setObjectName("search-input")
+        self._replace_input.setPlaceholderText("Replace with...")
+        self._replace_input.setFixedHeight(28)
+        self._replace_input.setVisible(False)
+        cl.addWidget(self._replace_input)
 
-    def _do_search(self):
-        query = self._input.text().strip()
-        if not query:
-            self._results.clear()
+        return container
+
+    def _build_buttons(self) -> QHBoxLayout:
+        btn_row: QHBoxLayout = QHBoxLayout()
+        btn_row.setContentsMargins(4, 2, 4, 2)
+        btn_row.setSpacing(4)
+
+        self._replace_btn: QPushButton = QPushButton(icon("circle"), "Replace All")
+        self._replace_btn.setObjectName("replace-btn")
+        self._replace_btn.setVisible(False)
+        self._replace_btn.clicked.connect(self._on_replace)
+        btn_row.addWidget(self._replace_btn)
+
+        toggle_btn: QPushButton = QPushButton(icon("circle"), "R")
+        toggle_btn.setObjectName("toggle-replace-btn")
+        toggle_btn.setFixedWidth(24)
+        toggle_btn.setToolTip("Toggle replace")
+        toggle_btn.clicked.connect(self._toggle_replace)
+        btn_row.addWidget(toggle_btn)
+
+        btn_row.addStretch()
+        return btn_row
+
+    def _on_text_changed(self, text: str) -> None:
+        self._timer.start(200)
+
+    def _do_search(self) -> None:
+        query: str = self._input.text()
+        if not query or not hasattr(self._engine, "search"):
             return
-
         results = self._engine.search(query)
         self._display_results(results)
-        self.search_requested.emit(query)
 
-    def _display_results(self, results: list):
+    def _display_results(self, results: list) -> None:
         self._results.clear()
-
         if not results:
-            item = QListWidgetItem("  No results found")
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            item: QListWidgetItem = QListWidgetItem("No results found")
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
             self._results.addItem(item)
             return
-
-        self._results.addItem(
-            QListWidgetItem(f"  {len(results)} results")
-        )
-
         for r in results:
-            text = (
-                f"  {r.filename}\n"
-                f"  {r.snippet[:80]}"
-            )
-            item = QListWidgetItem(text)
-            item.setData(Qt.ItemDataRole.UserRole, r.path)
-            item.setData(Qt.ItemDataRole.UserRole + 1, r.score)
+            label: str = f"{r.get('file', '?')}  —  {r.get('snippet', '')}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, r.get("path", ""))
             self._results.addItem(item)
 
-    def _on_item_clicked(self, item: QListWidgetItem):
-        path = item.data(Qt.ItemDataRole.UserRole)
+    def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        path: str = item.data(Qt.ItemDataRole.UserRole)
         if path:
             self.result_clicked.emit(path)
 
-    def _on_replace(self):
-        find_text = self._input.text().strip()
-        replace_text = self._replace_input.text()
-        if find_text:
+    def _toggle_replace(self) -> None:
+        visible: bool = not self._replace_input.isVisible()
+        self._replace_input.setVisible(visible)
+        self._replace_btn.setVisible(visible)
+
+    def _on_replace(self) -> None:
+        find_text: str = self._input.text()
+        replace_text: str = self._replace_input.text()
+        if find_text and replace_text:
             self.replace_requested.emit(find_text, replace_text)
 
-    def clear(self):
+    def clear(self) -> None:
         self._input.clear()
-        self._replace_input.clear()
         self._results.clear()
 
-    def focus(self):
+    def focus(self) -> None:
         self._input.setFocus()
-        self._input.selectAll()

@@ -2,11 +2,8 @@ import json
 import logging
 import os
 import ssl
-import sys
 import tempfile
 import threading
-import zipfile
-from pathlib import Path
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
@@ -15,7 +12,6 @@ from PyQt6.QtWidgets import (
     QProgressBar, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
 
 from zametka_dbs.core.version import __version__, __api_url__, __repo__
 
@@ -102,7 +98,6 @@ class UpdateDialog(QDialog):
         layout.addLayout(btn_row)
 
     def _do_check(self):
-        import threading
         threading.Thread(target=self._check_thread, daemon=True).start()
 
     def _check_thread(self):

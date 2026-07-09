@@ -1,7 +1,4 @@
-import logging
 import re
-
-logger = logging.getLogger(__name__)
 
 from zametka_dbs.core.rust_bridge import HAS_RUST
 from zametka_dbs.core.rust_bridge import rust_render_markdown as _rust_render

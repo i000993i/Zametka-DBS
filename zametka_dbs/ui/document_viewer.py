@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
-import subprocess
+
+from typing import Any
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -7,13 +10,13 @@ from PyQt6.QtWidgets import (
     QApplication,
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QColor, QAction
+from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QAction
 
 from assets.icons import icon
 
 _FITZ = None
 
-def _get_fitz():
+def _get_fitz() -> Any | None:
     global _FITZ
     if _FITZ is None:
         try:
@@ -24,24 +27,18 @@ def _get_fitz():
     return _FITZ if _FITZ else None
 
 
-ZOOM_PRESETS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
-BASE_DPI = 72
-RENDER_DPI = 150
-CACHE_LIMIT = 20
-VISIBLE_BUFFER = 3
+ZOOM_PRESETS: list[float] = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
+BASE_DPI: int = 72
+RENDER_DPI: int = 150
+VISIBLE_BUFFER: int = 3
 
-DBS_RENDERER = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "dbs-renderer", "target", "release", "dbs-renderer.exe",
-)
-
-VIEWER_EXTS = {
+VIEWER_EXTS: set[str] = {
     ".pdf", ".xps", ".epub", ".cbz", ".cbr", ".fb2",
 }
 
 
 class DocumentViewer(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._doc = None
         self._filepath = ""
@@ -72,11 +69,21 @@ class DocumentViewer(QWidget):
         ext = os.path.splitext(path)[1].lower()
         return ext in VIEWER_EXTS
 
-    def _init_ui(self):
+    def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        toolbar = self._build_toolbar()
+        layout.addWidget(toolbar)
+
+        self._build_scroll_area(layout)
+
+        self._page_widgets: list[_PageWidget] = []
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._scroll.verticalScrollBar().valueChanged.connect(self._on_scrolled)
+
+    def _build_toolbar(self) -> QWidget:
         toolbar = QWidget()
         toolbar.setObjectName("pdf-toolbar")
         toolbar.setFixedHeight(40)
@@ -160,8 +167,9 @@ class DocumentViewer(QWidget):
         self._zoom_in_btn.clicked.connect(self._zoom_in)
         tbar.addWidget(self._zoom_in_btn)
 
-        layout.addWidget(toolbar)
+        return toolbar
 
+    def _build_scroll_area(self, layout: QVBoxLayout) -> None:
         self._scroll = QScrollArea()
         self._scroll.setObjectName("pdf-scroll")
         self._scroll.setWidgetResizable(True)
@@ -188,11 +196,7 @@ class DocumentViewer(QWidget):
         self._scroll.setWidget(self._container)
         layout.addWidget(self._scroll, 1)
 
-        self._page_widgets: list[_PageWidget] = []
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self._scroll.verticalScrollBar().valueChanged.connect(self._on_scrolled)
-
-    def eventFilter(self, obj, event):
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if obj is self._scroll.viewport() and event.type() == event.Type.Wheel:
             we = event
             if we.modifiers() == Qt.KeyboardModifier.ControlModifier:
@@ -232,7 +236,7 @@ class DocumentViewer(QWidget):
         else:
             super().keyPressEvent(event)
 
-    def load(self, filepath: str):
+    def load(self, filepath: str) -> None:
         if _get_fitz() is None:
             self._show_error("PyMuPDF not installed")
             return
@@ -264,11 +268,11 @@ class DocumentViewer(QWidget):
         except Exception as e:
             self._show_error(f"Open failed: {e}")
 
-    def clear(self):
+    def clear(self) -> None:
         self._close_doc()
         self._show_error("No document loaded")
 
-    def _close_doc(self):
+    def _close_doc(self) -> None:
         self._filepath = ""
         self._loaded = False
         self._cache.clear()
@@ -282,7 +286,7 @@ class DocumentViewer(QWidget):
                 pass
             self._doc = None
 
-    def _show_error(self, msg: str):
+    def _show_error(self, msg: str) -> None:
         self._page_count_label.setText("of 0")
         self._page_spinner.blockSignals(True)
         self._page_spinner.setMaximum(1)
@@ -292,13 +296,13 @@ class DocumentViewer(QWidget):
         self._no_doc_label.setText(msg)
         self._no_doc_label.setVisible(True)
 
-    def _clear_pages(self):
+    def _clear_pages(self) -> None:
         for w in self._page_widgets:
             self._page_layout.removeWidget(w)
             w.deleteLater()
         self._page_widgets.clear()
 
-    def _build_placeholders(self):
+    def _build_placeholders(self) -> None:
         if self._page_count == 0:
             return
         self._no_doc_label.setVisible(False)
@@ -317,7 +321,7 @@ class DocumentViewer(QWidget):
 
         self._scroll.verticalScrollBar().setValue(0)
 
-    def _update_widget(self, idx: int):
+    def _update_widget(self, idx: int) -> None:
         if idx < 0 or idx >= len(self._page_widgets):
             return
         pw = self._page_widgets[idx]
@@ -328,50 +332,15 @@ class DocumentViewer(QWidget):
         else:
             pw.show_loading()
 
-    def _render_page(self, idx: int):
+    def _render_page(self, idx: int) -> None:
         if idx in self._cache or idx in self._error_pages:
             return
         if idx < 0 or idx >= self._page_count:
             return
 
-        if self._render_page_process(idx):
-            return
         self._render_page_local(idx)
 
-    def _render_page_process(self, idx: int) -> bool:
-        if not os.path.isfile(DBS_RENDERER):
-            return False
-        dpi = int(RENDER_DPI * self._scale)
-        try:
-            result = subprocess.run(
-                [DBS_RENDERER, self._filepath, str(idx), str(dpi)],
-                capture_output=True, timeout=30,
-            )
-            if result.returncode != 0:
-                return False
-            raw = result.stdout
-            if not raw.startswith(b"DATA "):
-                return False
-            nl = raw.index(b"\n", 5)
-            header = raw[5:nl].decode()
-            w, h = map(int, header.split())
-            data = raw[nl + 1:]
-            if len(data) != w * h * 4:
-                return False
-            img = QImage(data, w, h, w * 4, QImage.Format.Format_RGBA8888)
-            if img.isNull():
-                return False
-            qp = QPixmap.fromImage(img)
-            if qp.isNull():
-                return False
-            self._cache[idx] = qp
-            self._error_pages.pop(idx, None)
-            self._update_widget(idx)
-            return True
-        except Exception:
-            return False
-
-    def _render_page_local(self, idx: int):
+    def _render_page_local(self, idx: int) -> None:
         if not self._doc:
             self._error_pages[idx] = "no document"
             self._update_widget(idx)
@@ -410,7 +379,7 @@ class DocumentViewer(QWidget):
         self._error_pages[idx] = "render error"
         self._update_widget(idx)
 
-    def _copy_page_text(self, idx: int):
+    def _copy_page_text(self, idx: int) -> None:
         if self._doc is None:
             return
         try:
@@ -422,7 +391,7 @@ class DocumentViewer(QWidget):
         except Exception:
             pass
 
-    def _copy_all_text(self):
+    def _copy_all_text(self) -> None:
         if self._doc is None or self._page_count == 0:
             return
         try:
@@ -469,18 +438,18 @@ class DocumentViewer(QWidget):
             if i not in self._cache and i not in self._error_pages and i not in self._render_pending
         )
 
-    def _queue_rebuild(self):
+    def _queue_rebuild(self) -> None:
         if not self._loaded or self._page_count == 0:
             return
         self._rebuild_queued = True
         if not self._batch_timer.isActive():
             self._batch_timer.start(5)
 
-    def _flush_rebuild(self):
+    def _flush_rebuild(self) -> None:
         self._rebuild_queued = False
         self._queue_rebuild()
 
-    def _render_next_batch(self):
+    def _render_next_batch(self) -> None:
         if self._rebuild_queued:
             self._render_queue = self._build_render_queue()
             self._rebuild_queued = False
@@ -497,14 +466,14 @@ class DocumentViewer(QWidget):
         if self._render_queue:
             self._batch_timer.start(5)
 
-    def _evict_cache(self):
+    def _evict_cache(self) -> None:
         visible = self._get_visible_range()
         keep = set(range(max(0, visible[0] - 8), min(self._page_count, visible[1] + 8)))
         for k in list(self._cache):
             if k not in keep:
                 del self._cache[k]
 
-    def _rebuild(self):
+    def _rebuild(self) -> None:
         self._cache.clear()
         self._error_pages.clear()
         self._render_pending.clear()
@@ -513,11 +482,11 @@ class DocumentViewer(QWidget):
             pw.show_loading()
         self._queue_rebuild()
 
-    def _on_scrolled(self, _value: int = 0):
+    def _on_scrolled(self, _value: int = 0) -> None:
         if self._loaded and self._page_widgets:
             self._queue_rebuild()
 
-    def _go_to_page(self, page: int):
+    def _go_to_page(self, page: int) -> None:
         idx = page - 1
         if 0 <= idx < len(self._page_widgets):
             self._current_page = idx
@@ -525,46 +494,46 @@ class DocumentViewer(QWidget):
             sb.setValue(max(0, self._page_widgets[idx].y() - 10))
             self._queue_rebuild()
 
-    def _go_to_page_val(self, page: int):
+    def _go_to_page_val(self, page: int) -> None:
         page = max(1, min(page, self._page_count))
         self._page_spinner.blockSignals(True)
         self._page_spinner.setValue(page)
         self._page_spinner.blockSignals(False)
         self._go_to_page(page)
 
-    def _next_page(self):
+    def _next_page(self) -> None:
         self._go_to_page_val(self._page_spinner.value() + 1)
 
-    def _prev_page(self):
+    def _prev_page(self) -> None:
         self._go_to_page_val(self._page_spinner.value() - 1)
 
-    def _zoom_in(self):
+    def _zoom_in(self) -> None:
         idx = self._closest_zoom_index()
         idx = min(idx + 1, len(ZOOM_PRESETS) - 1)
         self._scale = ZOOM_PRESETS[idx]
         self._apply_zoom()
 
-    def _zoom_out(self):
+    def _zoom_out(self) -> None:
         idx = self._closest_zoom_index()
         idx = max(idx - 1, 0)
         self._scale = ZOOM_PRESETS[idx]
         self._apply_zoom()
 
-    def _closest_zoom_index(self):
+    def _closest_zoom_index(self) -> int:
         best = 0
         for i, p in enumerate(ZOOM_PRESETS):
             if abs(p - self._scale) < abs(ZOOM_PRESETS[best] - self._scale):
                 best = i
         return best
 
-    def _on_slider_zoom(self, val: int):
+    def _on_slider_zoom(self, val: int) -> None:
         self._scale = val / 100.0
         self._zoom_combo.blockSignals(True)
         self._zoom_combo.setCurrentText(f"{val}%")
         self._zoom_combo.blockSignals(False)
         self._apply_zoom()
 
-    def _on_combo_zoom(self, text: str):
+    def _on_combo_zoom(self, text: str) -> None:
         try:
             pct = int(text.replace("%", "").strip())
             pct = max(10, min(500, pct))
@@ -576,11 +545,11 @@ class DocumentViewer(QWidget):
         except ValueError:
             pass
 
-    def _apply_zoom(self):
+    def _apply_zoom(self) -> None:
         self._update_zoom_controls()
         self._rebuild()
 
-    def _update_zoom_controls(self):
+    def _update_zoom_controls(self) -> None:
         pct = int(self._scale * 100)
         self._zoom_slider.blockSignals(True)
         self._zoom_slider.setValue(pct)
@@ -589,7 +558,7 @@ class DocumentViewer(QWidget):
         self._zoom_combo.setCurrentText(f"{pct}%")
         self._zoom_combo.blockSignals(False)
 
-    def _fit_to_width(self):
+    def _fit_to_width(self) -> None:
         if self._page_count == 0 or not self._page_rects:
             return
         sw = self._scroll.viewport().width() - 40
@@ -598,7 +567,7 @@ class DocumentViewer(QWidget):
             self._scale = max(0.1, sw / pw)
             self._apply_zoom()
 
-    def _fit_to_page(self):
+    def _fit_to_page(self) -> None:
         if self._page_count == 0 or not self._page_rects:
             return
         sw = self._scroll.viewport().width() - 40
@@ -610,14 +579,16 @@ class DocumentViewer(QWidget):
             self._scale = max(0.1, min(scale_w, scale_h))
             self._apply_zoom()
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         if self._loaded and self._page_widgets:
             self._queue_rebuild()
 
 
 class _PageWidget(QWidget):
-    def __init__(self, page_num: int, doc_viewer=None, parent=None):
+    _page_num: int
+    _doc_viewer: DocumentViewer | None
+    def __init__(self, page_num: int, doc_viewer: DocumentViewer | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._page_num = page_num
         self._doc_viewer = doc_viewer
@@ -646,7 +617,7 @@ class _PageWidget(QWidget):
         self._page_label.setStyleSheet("background: transparent; color: #666;")
         layout.addWidget(self._page_label)
 
-    def _show_context_menu(self, pos):
+    def _show_context_menu(self, pos: QPoint) -> None:
         menu = QMenu(self._label)
         act_copy = QAction("Copy page text", self._label)
         act_copy.triggered.connect(self._copy_text)
@@ -656,23 +627,24 @@ class _PageWidget(QWidget):
         menu.addAction(act_copy_all)
         menu.exec(self._label.mapToGlobal(pos))
 
-    def _copy_text(self):
+    def _copy_text(self) -> None:
         if self._doc_viewer:
             self._doc_viewer._copy_page_text(self._page_num - 1)
 
-    def _copy_all_text(self):
+    def _copy_all_text(self) -> None:
         if self._doc_viewer:
             self._doc_viewer._copy_all_text()
 
-    def set_pixmap(self, pix: QPixmap):
+    def set_pixmap(self, pix: QPixmap) -> None:
         self._label.setText("")
         self._label.setPixmap(pix)
         self._label.setMinimumSize(QSize(0, 0))
 
-    def show_loading(self):
+    def show_loading(self) -> None:
         self._label.setText("Loading...")
         self._label.setPixmap(QPixmap())
 
-    def show_error(self, msg: str):
+    def show_error(self, msg: str) -> None:
         self._label.setText(f"[{msg}]")
         self._label.setPixmap(QPixmap())
+

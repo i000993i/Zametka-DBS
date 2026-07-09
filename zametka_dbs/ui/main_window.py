@@ -1,18 +1,14 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QSplitter, QLabel, QStatusBar,
-    QScrollArea, QFrame, QPushButton, QFileDialog, QTabBar, QMenu,
+    QScrollArea, QFrame, QPushButton, QFileDialog, QMenu,
     QProgressBar, QLineEdit,
 )
-from PyQt6.QtCore import Qt, QPoint, QSize, QTimer, QMimeData, pyqtSignal, QThread, QObject, QUrl
-from PyQt6.QtGui import QDrag
-from PyQt6.QtGui import QKeySequence, QShortcut, QAction, QPixmap, QColor, QFont
-from PyQt6.QtWidgets import QApplication, QCompleter
+from PyQt6.QtCore import Qt, QPoint, QSize, QTimer
+from PyQt6.QtGui import QKeySequence, QShortcut, QAction
+from PyQt6.QtWidgets import QCompleter
 from PyQt6.QtCore import QStringListModel
 import os
-
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 from assets.icons import icon
 from zametka_dbs.core.event_bus import get_bus, Events
@@ -21,7 +17,6 @@ from zametka_dbs.core.i18n import tr, set_language, current_language
 from zametka_dbs.core.rust_bridge import HAS_RUST
 from zametka_dbs.ui.code_editor import CodeEditor
 from zametka_dbs.ui.file_tree_widget import FileTreeWidget
-from zametka_dbs.ui.document_viewer import DocumentViewer
 from zametka_dbs.ui.preview_widget import PreviewWidget
 from zametka_dbs.ui.search_widget import SearchWidget
 from zametka_dbs.ui.pinned_widget import PinnedWidget
@@ -31,6 +26,8 @@ from zametka_dbs.ui.note_window import NoteWindow
 from zametka_dbs.markdown.wikilinks import LinkResolver
 from zametka_dbs.search.engine import SearchEngine
 from zametka_dbs.ui.command_palette import CommandPalette
+from zametka_dbs.ui.vault_manager import VaultManager
+from zametka_dbs.ui.tab_manager import TabManager
 
 try:
     from zametka_dbs.ui.html_browser import HtmlBrowser
@@ -41,70 +38,16 @@ except ImportError:
 from zametka_dbs.ui.draggable_tab_bar import DraggableTabBar
 
 
-class VaultWorker(QObject):
-    progress = pyqtSignal(int, int, str)
-    finished = pyqtSignal()
-
-    def __init__(self, vault_path, resolver, search_engine):
-        super().__init__()
-        self._vault_path = vault_path
-        self._resolver = resolver
-        self._search_engine = search_engine
-        self._cancelled = False
-
-    def cancel(self):
-        self._cancelled = True
-
-    def run(self):
-        self.progress.emit(0, 0, "Scanning files...")
-        self._resolver.set_vault_path(self._vault_path)
-        if self._cancelled:
-            self.finished.emit()
-            return
-
-        all_files = list(self._resolver.all_notes.values())
-        total = len(all_files)
-
-        if total == 0:
-            self.progress.emit(0, 0, "No markdown files found")
-            self.finished.emit()
-            return
-
-        self.progress.emit(0, total, f"Indexing for search...")
-        self._search_engine.index_vault(self._vault_path)
-        if self._cancelled:
-            self.finished.emit()
-            return
-
-        for i, fp in enumerate(all_files):
-            if self._cancelled:
-                self.finished.emit()
-                return
-            self.progress.emit(i + 1, total, f"Building links {i+1} of {total}...")
-
-        self.progress.emit(total, total, "Ready")
-        self.finished.emit()
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.bus = get_bus()
-        self._current_file = ""
 
         # Wikilinks engine
         self._resolver = LinkResolver()
         # Search engine
         self._search_engine = SearchEngine()
         self._preview_visible = True
-
-        # Tab state
-        self._open_tabs: list[str] = []
-        self._tab_state: dict[str, dict] = {}
-        self._untitled_counter = 0
-
-        # File watcher
-        self._watcher: Observer | None = None
 
         # Command palette
         self._command_palette = CommandPalette()
@@ -135,12 +78,44 @@ class MainWindow(QMainWindow):
 
         self._create_status_bar()
         self._setup_layout()
+        self._vault_manager = VaultManager(
+            self.file_tree, self._progress_bar, self.status_info,
+            self.preview, self._resolver, self._search_engine, self,
+        )
+        self._tab_manager = TabManager(
+            self.editor, self.preview, self.status_saved, self.status_info,
+            self._html_toggle_btn, self._main_stack, self._browser, self,
+            tab_bar=self._tab_bar,
+        )
+        self._tab_manager.connect_signals()
         self._create_menu_bar()
 
         self._connect_signals()
         self._setup_shortcuts()
         self.bus.emit(Events.APP_READY)
         QTimer.singleShot(2000, self._auto_check_updates)
+
+    def _make_btn(self, icon_name, object_name, tooltip, slot, text="",
+                  icon_size=QSize(14, 14), fixed_height=None, fixed_size=None,
+                  checkable=False, visible=True):
+        btn = QPushButton(text)
+        if icon_name:
+            btn.setIcon(icon(icon_name))
+            btn.setIconSize(icon_size)
+        btn.setObjectName(object_name)
+        if fixed_height:
+            btn.setFixedHeight(fixed_height)
+        if fixed_size:
+            btn.setFixedSize(fixed_size)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        if tooltip:
+            btn.setToolTip(tooltip)
+        if checkable:
+            btn.setCheckable(True)
+        if not visible:
+            btn.setVisible(False)
+        btn.clicked.connect(slot)
+        return btn
 
     def _init_i18n(self):
         lang = get_config().get("language", "ru")
@@ -243,68 +218,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.setSpacing(0)
 
         self._sidebar_stack = QStackedWidget()
-
-        # Page 0: Explorer (vault header + file tree + pinned)
-        explorer_page = QWidget()
-        explorer_layout = QVBoxLayout(explorer_page)
-        explorer_layout.setContentsMargins(0, 0, 0, 0)
-        explorer_layout.setSpacing(0)
-
-        header = QWidget()
-        header.setObjectName("sidebar-header")
-        header.setFixedHeight(34)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(10, 0, 6, 0)
-        header_layout.setSpacing(4)
-
-        header_icon = QLabel()
-        header_icon.setPixmap(icon("folder").pixmap(12, 12))
-        header_icon.setFixedWidth(16)
-        header_layout.addWidget(header_icon)
-        header_label = QLabel(tr("sidebar.explorer"))
-        header_label.setObjectName("vault-label")
-        header_layout.addWidget(header_label)
-        header_layout.addStretch()
-
-        self._vault_menu = QPushButton()
-        self._vault_menu.setIcon(icon("folder-open"))
-        self._vault_menu.setIconSize(QSize(14, 14))
-        self._vault_menu.setObjectName("icon-btn")
-        self._vault_menu.setFixedSize(22, 22)
-        self._vault_menu.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._vault_menu.setToolTip(tr("editor.tooltip.vault_menu"))
-        self._vault_menu.clicked.connect(self._show_vault_menu)
-        header_layout.addWidget(self._vault_menu)
-
-        self._help_btn = QPushButton()
-        self._help_btn.setIcon(icon("file-text"))
-        self._help_btn.setIconSize(QSize(14, 14))
-        self._help_btn.setObjectName("icon-btn")
-        self._help_btn.setFixedSize(22, 22)
-        self._help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._help_btn.setToolTip(tr("editor.tooltip.handbook"))
-        self._help_btn.clicked.connect(self._open_handbook)
-        header_layout.addWidget(self._help_btn)
-
-        explorer_layout.addWidget(header)
-
-        self._file_search_edit = QLineEdit()
-        self._file_search_edit.setObjectName("file-search-edit")
-        self._file_search_edit.setPlaceholderText(tr("editor.search_placeholder"))
-        self._file_search_edit.setClearButtonEnabled(True)
-        self._file_search_edit.setFixedHeight(28)
-        self._file_search_edit.textChanged.connect(self._on_file_search_text_changed)
-        self._file_search_edit.setVisible(False)
-        explorer_layout.addWidget(self._file_search_edit)
-
-        self.file_tree = FileTreeWidget()
-        explorer_layout.addWidget(self.file_tree, 1)
-
-        self.pinned_widget = PinnedWidget()
-        self.pinned_widget.item_clicked.connect(self._on_pinned_item_clicked)
-        explorer_layout.addWidget(self.pinned_widget)
-
-        self._sidebar_stack.addWidget(explorer_page)
+        self._sidebar_stack.addWidget(self._create_explorer_page())
 
         # Page 1: Search
         self.search_widget = SearchWidget(self._search_engine)
@@ -323,13 +237,71 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self._sidebar_stack)
         self._sidebar_stack.setCurrentIndex(0)
 
+    def _create_explorer_page(self):
+        explorer_page = QWidget()
+        explorer_layout = QVBoxLayout(explorer_page)
+        explorer_layout.setContentsMargins(0, 0, 0, 0)
+        explorer_layout.setSpacing(0)
+
+        explorer_layout.addWidget(self._build_explorer_header())
+
+        self._file_search_edit = QLineEdit()
+        self._file_search_edit.setObjectName("file-search-edit")
+        self._file_search_edit.setPlaceholderText(tr("editor.search_placeholder"))
+        self._file_search_edit.setClearButtonEnabled(True)
+        self._file_search_edit.setFixedHeight(28)
+        self._file_search_edit.textChanged.connect(self._on_file_search_text_changed)
+        self._file_search_edit.setVisible(False)
+        explorer_layout.addWidget(self._file_search_edit)
+
+        self.file_tree = FileTreeWidget()
+        explorer_layout.addWidget(self.file_tree, 1)
+
+        self.pinned_widget = PinnedWidget()
+        self.pinned_widget.item_clicked.connect(self._on_pinned_item_clicked)
+        explorer_layout.addWidget(self.pinned_widget)
+
+        return explorer_page
+
+    def _build_explorer_header(self):
+        header = QWidget()
+        header.setObjectName("sidebar-header")
+        header.setFixedHeight(34)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(10, 0, 6, 0)
+        header_layout.setSpacing(4)
+
+        header_icon = QLabel()
+        header_icon.setPixmap(icon("folder").pixmap(12, 12))
+        header_icon.setFixedWidth(16)
+        header_layout.addWidget(header_icon)
+        header_label = QLabel(tr("sidebar.explorer"))
+        header_label.setObjectName("vault-label")
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+
+        self._vault_menu = self._make_btn(
+            "folder-open", "icon-btn", tr("editor.tooltip.vault_menu"),
+            self._show_vault_menu, fixed_size=QSize(22, 22))
+        header_layout.addWidget(self._vault_menu)
+
+        self._help_btn = self._make_btn(
+            "file-text", "icon-btn", tr("editor.tooltip.handbook"),
+            self._tab_manager.open_handbook, fixed_size=QSize(22, 22))
+        header_layout.addWidget(self._help_btn)
+
+        return header
+
     def _create_editor_area(self):
         self._editor_container = QWidget()
         container_layout = QVBoxLayout(self._editor_container)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
+        self._create_tab_bar(container_layout)
+        self._create_main_stack(container_layout)
+        self.editor_area = self._editor_container
 
-        # Tab bar (always visible)
+    def _create_tab_bar(self, container_layout):
         tab_row = QWidget()
         tab_row.setObjectName("tab-row")
         tab_row.setFixedHeight(34)
@@ -343,73 +315,43 @@ class MainWindow(QMainWindow):
         self._tab_bar.setDrawBase(False)
         self._tab_bar.setExpanding(False)
         self._tab_bar.setUsesScrollButtons(True)
-        self._tab_bar.tabCloseRequested.connect(self._close_tab)
-        self._tab_bar.currentChanged.connect(self._on_tab_switched)
-        self._tab_bar.dragged_tab.connect(self._on_tab_dragged_out)
         tab_row_layout.addWidget(self._tab_bar, 1)
 
         tab_row_layout.addSpacing(8)
 
-        self._save_btn = QPushButton(tr("editor.save"))
-        self._save_btn.setIcon(icon("save"))
-        self._save_btn.setIconSize(QSize(14, 14))
-        self._save_btn.setObjectName("tab-btn")
-        self._save_btn.setFixedHeight(24)
-        self._save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._save_btn.setToolTip(tr("editor.tooltip.save"))
-        self._save_btn.clicked.connect(self._save_current_file)
-        tab_row_layout.addWidget(self._save_btn)
-
-        self._save_as_btn = QPushButton(tr("editor.save_as"))
-        self._save_as_btn.setIcon(icon("save"))
-        self._save_as_btn.setIconSize(QSize(14, 14))
-        self._save_as_btn.setObjectName("tab-btn")
-        self._save_as_btn.setFixedHeight(24)
-        self._save_as_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._save_as_btn.clicked.connect(self._save_as)
-        tab_row_layout.addWidget(self._save_as_btn)
-
-        # Preview toggle button
-        self._preview_toggle_btn = QPushButton()
-        self._preview_toggle_btn.setIcon(icon("layout"))
-        self._preview_toggle_btn.setIconSize(QSize(14, 14))
-        self._preview_toggle_btn.setObjectName("tab-btn")
-        self._preview_toggle_btn.setFixedHeight(24)
-        self._preview_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._preview_toggle_btn.setToolTip(tr("editor.tooltip.show_preview"))
-        self._preview_toggle_btn.clicked.connect(self._toggle_preview)
-        tab_row_layout.addWidget(self._preview_toggle_btn)
-
-        # Split editor toggle button
-        self._split_btn = QPushButton()
-        self._split_btn.setIcon(icon("columns"))
-        self._split_btn.setIconSize(QSize(14, 14))
-        self._split_btn.setObjectName("tab-btn")
-        self._split_btn.setFixedHeight(24)
-        self._split_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._split_btn.setToolTip(tr("editor.tooltip.split"))
-        self._split_btn.setCheckable(True)
-        self._split_btn.clicked.connect(self._toggle_split)
-        tab_row_layout.addWidget(self._split_btn)
-
-        # HTML render toggle button
-        self._html_toggle_btn = QPushButton()
-        self._html_toggle_btn.setIcon(icon("eye"))
-        self._html_toggle_btn.setIconSize(QSize(14, 14))
-        self._html_toggle_btn.setObjectName("tab-btn")
-        self._html_toggle_btn.setFixedHeight(24)
-        self._html_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._html_toggle_btn.setToolTip(tr("editor.tooltip.html"))
-        self._html_toggle_btn.setVisible(False)
-        self._html_toggle_btn.clicked.connect(self._toggle_html_view)
-        tab_row_layout.addWidget(self._html_toggle_btn)
+        self._create_tab_buttons(tab_row_layout)
 
         container_layout.addWidget(tab_row)
 
-        # Stack: Editor page | Browser page
+    def _create_tab_buttons(self, layout):
+        self._save_btn = self._make_btn(
+            "save", "tab-btn", tr("editor.tooltip.save"),
+            self._save_current_file, text=tr("editor.save"), fixed_height=24)
+        layout.addWidget(self._save_btn)
+
+        self._save_as_btn = self._make_btn(
+            "save", "tab-btn", None, self._save_as,
+            text=tr("editor.save_as"), fixed_height=24)
+        layout.addWidget(self._save_as_btn)
+
+        self._preview_toggle_btn = self._make_btn(
+            "layout", "tab-btn", tr("editor.tooltip.show_preview"),
+            self._toggle_preview, fixed_height=24)
+        layout.addWidget(self._preview_toggle_btn)
+
+        self._split_btn = self._make_btn(
+            "columns", "tab-btn", tr("editor.tooltip.split"),
+            self._toggle_split, fixed_height=24, checkable=True)
+        layout.addWidget(self._split_btn)
+
+        self._html_toggle_btn = self._make_btn(
+            "eye", "tab-btn", tr("editor.tooltip.html"),
+            self._toggle_html_view, fixed_height=24, visible=False)
+        layout.addWidget(self._html_toggle_btn)
+
+    def _create_main_stack(self, container_layout):
         self._main_stack = QStackedWidget()
 
-        # Page 0: Editor + Preview
         self._editor_page = QWidget()
         editor_layout = QVBoxLayout(self._editor_page)
         editor_layout.setContentsMargins(0, 0, 0, 0)
@@ -442,13 +384,10 @@ class MainWindow(QMainWindow):
         editor_layout.addWidget(self.splitter)
         self._main_stack.addWidget(self._editor_page)
 
-        # Page 1: WebEngine browser (lazy)
         self._browser = None
 
         container_layout.addWidget(self._main_stack, 1)
-
         self._main_stack.setCurrentIndex(0)
-        self.editor_area = self._editor_container
 
     def _create_status_bar(self):
         self.status_bar = QStatusBar()
@@ -460,21 +399,15 @@ class MainWindow(QMainWindow):
         self.status_words = QLabel(tr("status.words", count=0))
         self.status_font = QLabel(tr("status.ui_theme"))
 
-        self._search_btn = QPushButton(tr("editor.search"))
-        self._search_btn.setIcon(icon("search"))
-        self._search_btn.setIconSize(QSize(14, 14))
-        self._search_btn.setObjectName("search-btn")
-        self._search_btn.setFixedHeight(20)
-        self._search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._search_btn.clicked.connect(self._toggle_search)
+        self._search_btn = self._make_btn(
+            "search", "search-btn", None, self._toggle_search,
+            text=tr("editor.search"), fixed_height=20)
 
         self.status_info = QLabel(tr("status.ready"))
 
-        self._lang_btn = QPushButton()
-        self._lang_btn.setObjectName("lang-btn")
-        self._lang_btn.setFixedSize(26, 20)
-        self._lang_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._lang_btn.clicked.connect(self._toggle_language)
+        self._lang_btn = self._make_btn(
+            None, "lang-btn", None, self._toggle_language,
+            fixed_size=QSize(26, 20))
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setObjectName("status-progress")
@@ -527,18 +460,20 @@ class MainWindow(QMainWindow):
 
     def _create_menu_bar(self):
         mb = self.menuBar()
-        config = get_config()
-        current_theme = config.get("theme", "dark")
+        self._build_file_menu(mb)
+        self._build_view_menu(mb)
+        self._build_help_menu(mb)
 
+    def _build_file_menu(self, mb):
         self._file_menu = mb.addMenu(tr("menu.file"))
         self._act_open_file = QAction(tr("menu.file.open_file"), self)
         self._act_open_file.triggered.connect(self._open_file_dialog)
         self._file_menu.addAction(self._act_open_file)
         self._act_open_folder = QAction(tr("menu.file.open_folder"), self)
-        self._act_open_folder.triggered.connect(self._open_vault_dialog)
+        self._act_open_folder.triggered.connect(self._vault_manager.open_dialog)
         self._file_menu.addAction(self._act_open_folder)
         self._act_close_folder = QAction(tr("menu.file.close_folder"), self)
-        self._act_close_folder.triggered.connect(self._close_current_vault)
+        self._act_close_folder.triggered.connect(self._vault_manager.close_vault)
         self._file_menu.addAction(self._act_close_folder)
         self._file_menu.addSeparator()
         self._act_save = QAction(tr("menu.file.save"), self)
@@ -552,6 +487,9 @@ class MainWindow(QMainWindow):
         self._act_quit.triggered.connect(self.close)
         self._file_menu.addAction(self._act_quit)
 
+    def _build_view_menu(self, mb):
+        config = get_config()
+        current_theme = config.get("theme", "dark")
         self._view_menu = mb.addMenu(tr("menu.view"))
         self._act_preview = QAction(tr("menu.view.preview"), self)
         self._act_preview.triggered.connect(self._toggle_preview)
@@ -576,9 +514,10 @@ class MainWindow(QMainWindow):
         self._act_theme.triggered.connect(self._toggle_theme)
         self._view_menu.addAction(self._act_theme)
 
+    def _build_help_menu(self, mb):
         self._ref_menu = mb.addMenu(tr("menu.help"))
         self._act_handbook = QAction(tr("menu.help.handbook"), self)
-        self._act_handbook.triggered.connect(self._open_handbook)
+        self._act_handbook.triggered.connect(self._tab_manager.open_handbook)
         self._ref_menu.addAction(self._act_handbook)
         self._ref_menu.addSeparator()
         self._act_about = QAction(tr("menu.help.about_zametka"), self)
@@ -621,10 +560,10 @@ class MainWindow(QMainWindow):
         sc_save.activated.connect(self._save_current_file)
 
         sc_new = QShortcut(QKeySequence("Ctrl+N"), self)
-        sc_new.activated.connect(self._new_note)
+        sc_new.activated.connect(self._tab_manager.new_note)
 
         sc_open = QShortcut(QKeySequence("Ctrl+O"), self)
-        sc_open.activated.connect(self._open_vault_dialog)
+        sc_open.activated.connect(self._vault_manager.open_dialog)
 
         sc_search = QShortcut(QKeySequence("Ctrl+F"), self)
         sc_search.activated.connect(self._toggle_search)
@@ -683,18 +622,18 @@ class MainWindow(QMainWindow):
 
     def _on_command(self, cmd_id: str):
         method_map = {
-            "new_note": self._new_note,
+            "new_note": self._tab_manager.new_note,
             "save": self._save_current_file,
             "save_as": self._save_as,
             "open_file": self._open_file_dialog,
-            "open_vault": self._open_vault_dialog,
+            "open_vault": self._vault_manager.open_dialog,
             "toggle_preview": self._toggle_preview,
             "toggle_search": self._toggle_search,
             "toggle_file_search": self._toggle_file_search,
             "toggle_theme": self._toggle_theme,
             "toggle_split": self._toggle_split,
             "toggle_maximize": self._toggle_maximize,
-            "open_handbook": self._open_handbook,
+            "open_handbook": self._tab_manager.open_handbook,
         }
         method = method_map.get(cmd_id)
         if method:
@@ -714,137 +653,59 @@ class MainWindow(QMainWindow):
         self.file_tree.set_filter_text(text)
 
     def _save_current_file(self):
-        if not self._current_file or self._current_file.startswith("__"):
+        path = self._tab_manager.current_file
+        if not path or path.startswith("__"):
             self._save_as()
             return
         try:
-            with open(self._current_file, "w", encoding="utf-8") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 f.write(self.editor.toPlainText())
             self.status_saved.setText("Saved")
-            if self._current_file in self._tab_state:
-                self._tab_state[self._current_file]["modified"] = False
-                tidx = self._tab_index_of(self._current_file)
-                if tidx >= 0:
-                    name = os.path.basename(self._current_file)
-                    self._tab_bar.setTabText(tidx, name)
+            self._tab_manager.update_tab_after_save(path)
         except Exception as e:
             self.status_info.setText(f"Save error: {e}")
 
     def _save_as(self):
-        path, _ = QFileDialog.getSaveFileName(
+        new_path, _ = QFileDialog.getSaveFileName(
             self, "Save Note As", "",
             "Markdown (*.md);;All Files (*)"
         )
-        if not path:
+        if not new_path:
             return
-        old_path = self._current_file
+        old_path = self._tab_manager.current_file
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with open(new_path, "w", encoding="utf-8") as f:
                 f.write(self.editor.toPlainText())
         except Exception as e:
             self.status_info.setText(f"Save error: {e}")
             return
 
-        # Update tab data
-        tidx = self._tab_index_of(old_path)
-        if tidx >= 0:
-            self._open_tabs.remove(old_path)
-            self._open_tabs.append(path)
-            if old_path in self._tab_state:
-                del self._tab_state[old_path]
-            self._tab_state[path] = {
-                "content": self.editor.toPlainText(),
-                "cursor": (self.editor.get_current_line(), self.editor.get_current_column()),
-                "scroll": self.editor.verticalScrollBar().value() if self.editor.verticalScrollBar() else 0,
-                "modified": False,
-            }
-            self._tab_bar.setTabData(tidx, path)
-            name = os.path.basename(path)
-            self._tab_bar.setTabText(tidx, name)
-
-        self._current_file = path
-        self.status_saved.setText("Saved")
-        self.status_info.setText(path)
-        name = os.path.basename(path)
-        self.setWindowTitle(f"{name} — Zametka")
+        self._tab_manager.update_tab_after_save_as(old_path, new_path)
+        self._tab_manager.current_file = new_path
 
     def _connect_signals(self):
         self.editor.cursorPositionChanged.connect(self._update_status_cursor)
         self.editor.textChanged.connect(self._on_editor_changed)
         self.editor2.cursorPositionChanged.connect(self._update_status_cursor)
         self.editor2.textChanged.connect(self._on_editor2_changed)
-        self.file_tree.file_opened.connect(self._on_file_opened)
+        self.file_tree.file_opened.connect(self._tab_manager.on_file_opened)
         self.preview.wikilink_clicked.connect(self._on_wikilink_clicked)
         self.preview.rendered.connect(self._on_preview_rendered)
-        self.search_widget.result_clicked.connect(self._on_file_opened)
+        self.search_widget.result_clicked.connect(self._tab_manager.on_file_opened)
         self.search_widget.replace_requested.connect(self._on_replace_in_file)
 
-        self._tab_bar.tab_rename_requested.connect(self._on_tab_rename_requested)
-        self._tab_bar.tab_close_others_requested.connect(self._on_tab_close_others)
-        self._tab_bar.tab_close_all_requested.connect(self._on_tab_close_all)
-        self._tab_bar.tab_copy_path_requested.connect(self._on_tab_copy_path)
+        self._tab_manager.save_requested.connect(self._save_current_file)
+        self._tab_manager.save_as_requested.connect(self._save_as)
 
         self._syncing_scroll = False
         editor_scroll = self.editor.verticalScrollBar()
         editor_scroll.valueChanged.connect(self._sync_editor_scroll_to_preview)
 
-        # Create initial tab with welcome note
-        content = (
-            "# Welcome to Zametka\n\n"
-            "Click the folder icon in the sidebar to open a vault folder,\n"
-            "or start typing here to create a new note."
-        )
-        self._untitled_counter += 1
-        path = f"__untitled_{self._untitled_counter}__"
-        self._open_tabs.append(path)
-        self._tab_state[path] = {
-            "content": content,
-            "cursor": (1, 1),
-            "scroll": 0,
-            "modified": False,
-        }
-        tidx = self._tab_bar.addTab("untitled.md")
-        self._tab_bar.setTabData(tidx, path)
-        self._tab_bar.setCurrentIndex(tidx)
-        self._switch_to_tab(tidx)
-
-        config = get_config()
-        vault_path = config.get("vault_path", "")
-        if vault_path and os.path.isdir(vault_path):
-            self._init_vault(vault_path)
-            self.status_info.setText("Vault opened")
-        else:
-            self.status_info.setText("No vault — open a folder to start")
-
-    def _start_watcher(self, vault_path: str):
-        self._stop_watcher()
-
-        class _Handler(FileSystemEventHandler):
-            def __init__(self, win):
-                self.win = win
-
-            def on_modified(self, event):
-                if event.is_directory:
-                    return
-                self.win.status_info.setText(f"File changed: {os.path.basename(event.src_path)}")
-
-            def on_created(self, event):
-                if event.is_directory:
-                    return
-                self.win.status_info.setText(f"File created: {os.path.basename(event.src_path)}")
-
-        self._watcher = Observer()
-        self._watcher.schedule(_Handler(self), vault_path, recursive=True)
-        self._watcher.start()
-
-    def _stop_watcher(self):
-        if self._watcher:
-            self._watcher.stop()
-            self._watcher.join(timeout=2)
-            self._watcher = None
+        self._tab_manager.create_initial_tab()
+        self._vault_manager.init_on_startup()
 
     def closeEvent(self, event):
-        self._stop_watcher()
+        self._vault_manager.stop_watcher()
         super().closeEvent(event)
 
     def dragEnterEvent(self, event):
@@ -859,7 +720,7 @@ class MainWindow(QMainWindow):
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if path and os.path.exists(path):
-                self._on_file_opened(path)
+                self._tab_manager.on_file_opened(path)
         event.acceptProposedAction()
 
     def _on_wikilink_completed(self, text: str):
@@ -888,209 +749,11 @@ class MainWindow(QMainWindow):
             self._wikilink_completer.popup().hide()
             self._wikilink_completer_visible = False
 
-    def _init_vault(self, vault_path: str):
-        self.file_tree.set_vault_path(vault_path)
-
-        self._progress_bar.show()
-        self._progress_bar.setRange(0, 0)
-        self.status_info.setText("Initializing vault...")
-
-        self._cleanup_vault_worker()
-
-        self._vault_thread = QThread()
-        self._vault_worker = VaultWorker(
-            vault_path, self._resolver, self._search_engine
-        )
-        self._vault_worker.moveToThread(self._vault_thread)
-        self._vault_thread.started.connect(self._vault_worker.run)
-        self._vault_worker.finished.connect(self._vault_thread.quit)
-        self._vault_worker.finished.connect(self._vault_worker.deleteLater)
-        self._vault_thread.finished.connect(self._vault_thread.deleteLater)
-        self._vault_worker.progress.connect(self._on_vault_progress)
-        self._vault_worker.finished.connect(
-            lambda: self._on_vault_finished(vault_path)
-        )
-        self._vault_thread.start()
-
-    def _on_vault_progress(self, current, total, message):
-        if total > 0:
-            self._progress_bar.setRange(0, total)
-            self._progress_bar.setValue(current)
-        else:
-            self._progress_bar.setRange(0, 0)
-        self.status_info.setText(message)
-
-    def _on_vault_finished(self, vault_path):
-        self._progress_bar.hide()
-        all_files = list(self._resolver.all_notes.values())
-        self.preview.set_note_map(self._resolver.all_notes)
-        self._start_watcher(vault_path)
-        self.status_info.setText(
-            f"Vault: {len(all_files)} notes"
-        )
-
-    def _cleanup_vault_worker(self):
-        if hasattr(self, '_vault_worker') and self._vault_worker is not None:
-            self._vault_worker.cancel()
-            self._vault_worker = None
-        if hasattr(self, '_vault_thread') and self._vault_thread is not None:
-            if self._vault_thread.isRunning():
-                self._vault_thread.quit()
-                self._vault_thread.wait(2000)
-            self._vault_thread = None
-
-    def _new_note(self):
-        self._untitled_counter += 1
-        path = f"__untitled_{self._untitled_counter}__"
-        self._open_tabs.append(path)
-        self._tab_state[path] = {
-            "content": "",
-            "cursor": (1, 1),
-            "scroll": 0,
-            "modified": False,
-        }
-        tidx = self._tab_bar.addTab("untitled.md")
-        self._tab_bar.setCurrentIndex(tidx)
-        self._tab_bar.setTabData(tidx, path)
-        self._switch_to_tab(tidx)
-
-    def _on_tab_rename_requested(self, index: int):
-        path = self._tab_bar.tabData(index)
-        if not path:
-            return
-        old_name = os.path.basename(path)
-        from PyQt6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(self, "Rename Tab", "New name:", text=old_name)
-        if not ok or not name or name == old_name:
-            return
-        self._tab_bar.setTabText(index, name)
-
-    def _on_tab_close_others(self, index: int):
-        keep_path = self._tab_bar.tabData(index)
-        for i in range(self._tab_bar.count() - 1, -1, -1):
-            if i != index:
-                path = self._tab_bar.tabData(i)
-                self._tab_bar.removeTab(i)
-                if path in self._open_tabs:
-                    self._open_tabs.remove(path)
-                if path in self._tab_state:
-                    del self._tab_state[path]
-
-    def _on_tab_close_all(self):
-        for i in range(self._tab_bar.count() - 1, -1, -1):
-            path = self._tab_bar.tabData(i)
-            self._tab_bar.removeTab(i)
-            if path in self._open_tabs:
-                self._open_tabs.remove(path)
-            if path in self._tab_state:
-                del self._tab_state[path]
-        self._new_note()
-
-    def _on_tab_copy_path(self, index: int):
-        path = self._tab_bar.tabData(index)
-        if path:
-            from PyQt6.QtWidgets import QApplication
-            QApplication.clipboard().setText(str(path))
-
-    def _tab_index_of(self, path: str) -> int:
-        try:
-            return self._open_tabs.index(path)
-        except ValueError:
-            return -1
-
-    def _save_current_tab_state(self):
-        path = self._current_file
-        if path not in self._tab_state:
-            return
-        state = self._tab_state[path]
-        state["content"] = self.editor.toPlainText()
-        state["cursor"] = (
-            self.editor.get_current_line(),
-            self.editor.get_current_column(),
-        )
-        scroll = self.editor.verticalScrollBar().value() if self.editor.verticalScrollBar() else 0
-        state["scroll"] = scroll
-
-    def _switch_to_tab(self, index: int):
-        if index < 0 or index >= self._tab_bar.count():
-            return
-        path = self._tab_bar.tabData(index)
-        if not path or path not in self._tab_state:
-            return
-
-        # Save current document before switching
-        old_path = self._current_file
-        if old_path and old_path in self._tab_state:
-            self._tab_state[old_path]["content"] = self.editor.toPlainText()
-            self._tab_state[old_path]["scroll"] = (
-                self.editor.verticalScrollBar().value() if self.editor.verticalScrollBar() else 0
-            )
-
-        self._current_file = path
-        state = self._tab_state[path]
-
-        viewer_path = state.get("viewer_path")
-        viewer_type = state.get("viewer_type")
-        self.editor.blockSignals(True)
-        if viewer_path and os.path.isfile(viewer_path):
-            if viewer_type == "document":
-                self.preview.show_document(viewer_path)
-            else:
-                self.preview.show_image(viewer_path)
-            self.editor.setPlainText("")
-            self.editor.setReadOnly(True)
-            self.status_saved.setText("")
-        else:
-            self.editor.setReadOnly(False)
-            self.editor.setPlainText(state["content"])
-            if path:
-                self.editor.set_language_for_file(path)
-
-            if state["cursor"]:
-                line, col = state["cursor"]
-                self.editor.set_cursor_position(line, col)
-            if state.get("scroll") is not None:
-                sb = self.editor.verticalScrollBar()
-                if sb:
-                    sb.setValue(state["scroll"])
-
-            modified = state.get("modified", False)
-            self.status_saved.setText("Unsaved" if modified else "Saved")
-
-            cached = state.get("html")
-            if cached:
-                self.preview.set_html(cached)
-            else:
-                self.preview.update_content(state["content"])
-
-        self.editor.blockSignals(False)
-
-        is_untitled = path.startswith("__untitled_") if path else True
-        if is_untitled:
-            self.setWindowTitle("Zametka")
-        else:
-            name = os.path.basename(path)
-            self.setWindowTitle(f"{name} — Zametka")
-
-        if path and not is_untitled and not viewer_path:
-            self.status_info.setText(path)
-
-        is_html = path and not is_untitled and path.lower().endswith((".html", ".htm"))
-        self._html_toggle_btn.setVisible(is_html)
-        if self._main_stack.currentIndex() == 1:
-            if is_html and path and os.path.isfile(path):
-                self._browser.load_file(os.path.abspath(path))
-            else:
-                self._main_stack.setCurrentIndex(0)
-
     def _on_pinned_item_clicked(self, path: str):
         if os.path.isfile(path):
-            self._on_file_opened(path)
+            self._tab_manager.on_file_opened(path)
         elif os.path.isdir(path):
-            self.status_info.setText(f"Pinned folder: {path}")
-            config = get_config()
-            config.set("vault_path", path)
-            self._init_vault(path)
+            self._vault_manager.init_from_pin(path)
 
     def _on_notes_open(self, filepath: str):
         w = NoteWindow(filepath)
@@ -1098,69 +761,40 @@ class MainWindow(QMainWindow):
         w.show()
         w.raise_()
 
-    def _on_tab_switched(self, index: int):
-        self._save_current_tab_state()
-        self._switch_to_tab(index)
-
-    def _close_tab(self, index: int):
-        if index < 0 or index >= self._tab_bar.count():
-            return
-        path = self._tab_bar.tabData(index)
-        self._save_current_tab_state()
-
-        state = self._tab_state.get(path)
-        if state and state.get("modified"):
-            from PyQt6.QtWidgets import QMessageBox
-            name = os.path.basename(path) if path and not path.startswith("__") else "Untitled"
-            ret = QMessageBox.question(
-                self, "Unsaved changes",
-                f"Save changes to {name}?",
-                QMessageBox.StandardButton.Save |
-                QMessageBox.StandardButton.Discard |
-                QMessageBox.StandardButton.Cancel,
-            )
-            if ret == QMessageBox.StandardButton.Cancel:
-                return
-            if ret == QMessageBox.StandardButton.Save:
-                if path.startswith("__untitled"):
-                    self._save_as()
-                else:
-                    self._save_current_file()
-
-        self._tab_bar.removeTab(index)
-        if path in self._open_tabs:
-            self._open_tabs.remove(path)
-        if path in self._tab_state:
-            del self._tab_state[path]
-
-        if self._tab_bar.count() == 0:
-            self._new_note()
-
     def _show_vault_menu(self):
         menu = QMenu(self)
         config = get_config()
         current_theme = config.get("theme", "dark")
 
+        self._add_file_actions(menu)
+        menu.addSeparator()
+        self._add_folder_actions(menu)
+        menu.addSeparator()
+        self._add_save_actions(menu)
+        menu.addSeparator()
+        self._add_theme_action(menu, current_theme)
+
+        menu.exec(self._vault_menu.mapToGlobal(self._vault_menu.rect().bottomLeft()))
+
+    def _add_file_actions(self, menu: QMenu):
         act_open_file = QAction(tr("vault_menu.open_file"), self)
         act_open_file.triggered.connect(self._open_file_dialog)
         menu.addAction(act_open_file)
 
         act_create_file = QAction(tr("vault_menu.create_file"), self)
-        act_create_file.triggered.connect(self._new_note)
+        act_create_file.triggered.connect(self._tab_manager.new_note)
         menu.addAction(act_create_file)
 
-        menu.addSeparator()
-
+    def _add_folder_actions(self, menu: QMenu):
         act_open_folder = QAction(tr("vault_menu.open_folder"), self)
-        act_open_folder.triggered.connect(self._open_vault_dialog)
+        act_open_folder.triggered.connect(self._vault_manager.open_dialog)
         menu.addAction(act_open_folder)
 
         act_close_folder = QAction(tr("vault_menu.close_folder"), self)
-        act_close_folder.triggered.connect(self._close_current_vault)
+        act_close_folder.triggered.connect(self._vault_manager.close_vault)
         menu.addAction(act_close_folder)
 
-        menu.addSeparator()
-
+    def _add_save_actions(self, menu: QMenu):
         act_save = QAction(tr("vault_menu.save"), self)
         act_save.triggered.connect(self._save_current_file)
         menu.addAction(act_save)
@@ -1169,8 +803,7 @@ class MainWindow(QMainWindow):
         act_save_as.triggered.connect(self._save_as)
         menu.addAction(act_save_as)
 
-        menu.addSeparator()
-
+    def _add_theme_action(self, menu: QMenu, current_theme: str):
         act_toggle_theme = QAction(
             tr("vault_menu.dark_theme") if current_theme == "light" else tr("vault_menu.light_theme"),
             self
@@ -1178,13 +811,9 @@ class MainWindow(QMainWindow):
         act_toggle_theme.triggered.connect(self._toggle_theme)
         menu.addAction(act_toggle_theme)
 
-        menu.exec(self._vault_menu.mapToGlobal(self._vault_menu.rect().bottomLeft()))
-
     def _open_file_dialog(self):
         config = get_config()
         vault_path = config.get("vault_path", "")
-
-        # If vault is open, start from vault directory
         start_dir = vault_path if vault_path and os.path.isdir(vault_path) else ""
 
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1192,44 +821,7 @@ class MainWindow(QMainWindow):
             "Markdown Files (*.md);;All Files (*)"
         )
         if file_path:
-            self._on_file_opened(file_path)
-
-    def _close_current_vault(self):
-        self._current_file = ""
-        if hasattr(self, 'file_tree'):
-            self.file_tree.clear_vault()
-        config = get_config()
-        config.set("vault_path", "")
-        self.status_info.setText("Vault closed — open a folder to start")
-
-    def _open_vault_dialog(self):
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "Open Vault Folder", "",
-            QFileDialog.Option.ShowDirsOnly
-        )
-        if dir_path:
-            config = get_config()
-            config.set("vault_path", dir_path)
-            self._init_vault(dir_path)
-            self.status_info.setText(f"Vault: {dir_path}")
-
-    def _open_handbook(self):
-        from zametka_dbs.markdown.md_handbook import get_handbook
-        content = get_handbook()
-        self._untitled_counter += 1
-        path = f"__handbook_{self._untitled_counter}__"
-        self._open_tabs.append(path)
-        self._tab_state[path] = {
-            "content": content,
-            "cursor": (1, 1),
-            "scroll": 0,
-            "modified": False,
-        }
-        tidx = self._tab_bar.addTab("📖 Handbook.md")
-        self._tab_bar.setCurrentIndex(tidx)
-        self._tab_bar.setTabData(tidx, path)
-        self._switch_to_tab(tidx)
-        self.status_info.setText("Handbook opened")
+            self._tab_manager.on_file_opened(file_path)
 
     def _toggle_search(self):
         if self._sidebar_stack.currentIndex() == 1:
@@ -1248,7 +840,7 @@ class MainWindow(QMainWindow):
     def _toggle_html_view(self):
         if self._main_stack.currentIndex() == 0:
             self._ensure_browser()
-            path = self._current_file
+            path = self._tab_manager.current_file
             if path and os.path.isfile(path):
                 self._browser.load_file(os.path.abspath(path))
             self._main_stack.setCurrentIndex(1)
@@ -1269,11 +861,6 @@ class MainWindow(QMainWindow):
             self._preview_toggle_btn.setToolTip("Hide Preview (Ctrl+P)")
             self._preview_toggle_btn.setIcon(icon("layout"))
 
-    def _on_tab_dragged_out(self, path: str):
-        idx = self._tab_index_of(path)
-        if idx >= 0:
-            self._close_tab(idx)
-
     def _on_replace_in_file(self, find_text: str, replace_text: str):
         content = self.editor.toPlainText()
         new_content = content.replace(find_text, replace_text)
@@ -1284,89 +871,10 @@ class MainWindow(QMainWindow):
             cursor.setPosition(min(pos, len(new_content)))
             self.editor.setTextCursor(cursor)
 
-    def _on_file_opened(self, path: str):
-        idx = self._tab_index_of(path)
-        if idx >= 0:
-            self._tab_bar.setCurrentIndex(idx)
-            return
-
-        ext = os.path.splitext(path)[1].lower()
-        if ext in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"}:
-            name = os.path.basename(path)
-            self._save_current_tab_state()
-            self._open_tabs.append(path)
-            self._tab_state[path] = {
-                "content": "",
-                "cursor": (1, 1),
-                "scroll": 0,
-                "modified": False,
-                "viewer_path": path,
-                "viewer_type": "image",
-            }
-            tidx = self._tab_bar.addTab(name)
-            self._tab_bar.setTabData(tidx, path)
-            self._tab_bar.setCurrentIndex(tidx)
-            self._switch_to_tab(tidx)
-            self.preview.show_image(path)
-            return
-
-        if DocumentViewer.can_open(path):
-            name = os.path.basename(path)
-            self._save_current_tab_state()
-            self._open_tabs.append(path)
-            self._tab_state[path] = {
-                "content": "",
-                "cursor": (1, 1),
-                "scroll": 0,
-                "modified": False,
-                "viewer_path": path,
-                "viewer_type": "document",
-            }
-            tidx = self._tab_bar.addTab(name)
-            self._tab_bar.setTabData(tidx, path)
-            self._tab_bar.setCurrentIndex(tidx)
-            self._switch_to_tab(tidx)
-            self.preview.show_document(path)
-            return
-
-        from zametka_dbs.utils.file_size import is_file_too_large, format_size
-        if is_file_too_large(path):
-            from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self, "Large file",
-                f"File is {format_size(path)}. Open anyway? "
-                "Large files may cause performance issues.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            self._save_current_tab_state()
-
-            self._open_tabs.append(path)
-            self._tab_state[path] = {
-                "content": content,
-                "cursor": (1, 1),
-                "scroll": 0,
-                "modified": False,
-            }
-            name = os.path.basename(path)
-            tidx = self._tab_bar.addTab(name)
-            self._tab_bar.setTabData(tidx, path)
-            self._tab_bar.setCurrentIndex(tidx)
-            self._switch_to_tab(tidx)
-        except Exception as e:
-            self.status_info.setText(f"Error: {e}")
-
     def _on_wikilink_clicked(self, target: str):
-        """Handle click on [[wikilink]] in preview."""
         resolved = self._resolver.resolve(target)
         if resolved:
-            self._on_file_opened(resolved)
+            self._tab_manager.on_file_opened(resolved)
         else:
             self.status_info.setText(f"Wikilink not found: {target}")
 
@@ -1376,8 +884,7 @@ class MainWindow(QMainWindow):
         self.status_cursor.setText(f"Ln {line}, Col {col}")
 
     def _on_preview_rendered(self, html: str):
-        if self._current_file in self._tab_state:
-            self._tab_state[self._current_file]["html"] = html
+        self._tab_manager.cache_html(html)
         self._sync_editor_scroll_to_preview(force=True)
 
     def _sync_editor_scroll_to_preview(self, value=None, force=False):
@@ -1404,16 +911,14 @@ class MainWindow(QMainWindow):
         count = self.editor.word_count()
         self.status_words.setText(f"Words: {count}")
         self._update_wikilink_completer()
-        ext = os.path.splitext(self._current_file)[1].lower() if self._current_file else ""
+        ext = os.path.splitext(self._tab_manager.current_file)[1].lower() if self._tab_manager.current_file else ""
         if ext in (".md", ".markdown", ".mdown", ".mdx"):
             self.preview.update_content(self.editor.toPlainText())
         else:
             self.preview._browser.setHtml("<html><body style='color:#888;font-family:sans-serif;padding:2em'><p>Preview only available for Markdown files.</p></body></html>")
-        if self._current_file:
+        if self._tab_manager.current_file:
             self.status_saved.setText("Unsaved")
-            if self._current_file in self._tab_state:
-                self._tab_state[self._current_file]["modified"] = True
-                self._tab_state[self._current_file].pop("html", None)
+            self._tab_manager.mark_modified()
 
     def _on_editor2_changed(self):
         self.status_words.setText(f"Words: {self.editor2.word_count()}")

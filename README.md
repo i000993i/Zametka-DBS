@@ -14,7 +14,7 @@
 - **Просмотр HTML/PDF** — Chromium (QWebEngineView) для `.html`, PyMuPDF для `.pdf/.epub/.cbz`
 - **Бейджи** — 201+ значок в 8 категориях с 6 стилями отображения
 - **Раздел "Notes"** — коллекция заметок в виде кирпичиков-карточек с бейджами
-- **Встроенный терминал** (Ctrl+`) — несколько вкладок, ConPTY (Rust), поддержка UTF-8, кликабельные ссылки/пути *(удалён в v0.2.3)*
+
 - **Git History** — просмотр изменений, коммитов и диффов (асинхронно, без зависаний)
 - **Проверка обновлений** через GitHub (автоматическая при запуске)
 - **Переключение языка** (RU/EN) — кнопка в статус-баре
@@ -31,17 +31,6 @@
 | `markdown.rs` | Рендеринг MD→HTML через comrak, парсинг `[[wikilinks]]` |
 | `language.rs` | Определение языка по расширению, сканирование папок (до 5 языков) |
 | `linenumbers.rs` | Нумерация строк с пропуском пустых строк, классификация (blank/code/heading/...) |
-
-### `zametka-conpty` (PyO3-модуль)
-
-| Модуль | Описание |
-|---|---|
-| `conpty.rs` | Windows Pseudo Console (ConPTY) — создание, запись, чтение, ресайз |
-| `ansi.rs` | Парсер ANSI-escape последовательностей (8/16/256 цветов) |
-
-### `dbs-renderer` (CLI)
-
-Утилита для рендеринга PDF/текстовых страниц в RGBA-изображения (pdf-extract + ab_glyph).
 
 Python-код автоматически использует Rust-модули при наличии; если их нет — прозрачное падение на Python-реализацию.
 
@@ -91,7 +80,7 @@ iscc installer\setup.iss
 | `Ctrl+S` | Сохранить |
 | `Ctrl+P` | Предпросмотр |
 | `Ctrl+F` | Поиск |
-| `` Ctrl+` `` | Встроенный терминал *(удалён в v0.2.3)* |
+
 | `Ctrl+Shift+F` | Поиск файлов |
 | `Ctrl+Shift+P` | Палитра команд |
 | `Ctrl+Shift+S` | Разделить редактор |
@@ -102,7 +91,7 @@ iscc installer\setup.iss
 Приложение автоматически проверяет наличие новой версии на GitHub при запуске.
 Вручную: меню "О приложении" → "Проверить обновления...".
 
-Версия `v0.2.3` — удалён терминал и backlinks, нумерация строк через Rust, исправление UI-багов.
+Версия `v0.3.0` — рефакторинг: извлечение VaultManager, TabManager и внутренних классов, вынос данных в JSON, разбивка длинных методов.
 
 Релизы публикуются на https://github.com/i000993i/Zametka-DBS/releases
 
@@ -116,14 +105,19 @@ zametka_dbs/
 │   ├── config.py     #   Config (Rust/Python), type-safe get/set
 │   ├── event_bus.py  #   Pub/sub шина (Events.THEME_CHANGED, LANGUAGE_CHANGED, ...)
 │   ├── i18n.py       #   Интернационализация (tr(), set_language())
-│   ├── rust_bridge.py#   Единая точка импорта zametka_core / zametka_conpty
+│   ├── rust_bridge.py#   Единая точка импорта zametka_core
 │   └── badges.py     #   Бейджи, заметки
+├── data/             # Внешние данные (JSON)
+│   ├── file_icons.json    # 46 иконок языков
+│   └── syntax_colors.json # 2 темы подсветки × 20 ключей
 ├── markdown/         # Вики-ссылки, шаблоны, Handbook
 ├── preview/          # Рендеринг Markdown (Rust / markdown-it)
 ├── search/           # Поиск (Rust / Python)
 └── ui/               # MainWindow, CodeEditor, Preview, FileTree, Pinned,
                       # SearchWidget, NotesBrowser, NoteWindow,
                       # PDF-вьюер (PyMuPDF), CommandPalette, GitHistory
+                      # VaultManager, TabManager, FileFilterProxy,
+                      # BadgeDialog, NoteCard, TreeStyle
 
 zametka-core/         # Rust → PyO3 (zametka_core.pyd)
 ├── src/
@@ -134,17 +128,6 @@ zametka-core/         # Rust → PyO3 (zametka_core.pyd)
 │   └── linenumbers.rs#   compute_line_numbers (нумерация строк)
 ├── Cargo.toml
 └── pyproject.toml
-
-zametka-conpty/       # Rust → PyO3 (zametka_conpty.pyd)
-├── src/
-│   ├── conpty.rs     #   Windows ConPTY обёртка
-│   └── ansi.rs       #   ANSI escape-парсер
-├── Cargo.toml
-└── pyproject.toml
-
-dbs-renderer/         # Rust CLI — PDF/TXT → PNG
-├── src/main.rs
-└── Cargo.toml
 
 assets/
 ├── icons.py          # Загрузчик SVG-иконок с LRU-кэшем
@@ -161,19 +144,29 @@ installer/            # Установщик
 
 ```
 app.py / python -m zametka_dbs
-  └── MainWindow (QMainWindow)
+  └── MainWindow (QMainWindow, ~950 строк)
+        ├── VaultManager (ui/vault_manager.py) — открытие/закрытие/watcher
+        ├── TabManager (ui/tab_manager.py) — вкладки, состояние, переключение
+        │
         ├── ActivityBar (48px): Explorer | Search | Notes | History
         │
         ├── Sidebar (QStackedWidget, 280px)
         │     ├── Page 0: FileTree + Pinned (Explorer)
+        │     │     ├── FileTreeWidget (дерево файлов)
+        │     │     │     ├── FileFilterProxy (фильтрация + иконки из file_icons.json)
+        │     │     │     └── TreeBranchStyle (QProxyStyle — ветви дерева)
+        │     │     └── PinnedWidget (закреплённое)
+        │     │           └── BadgeDialog, BadgeItemWidget (ui/badge_dialog.py)
         │     ├── Page 1: SearchWidget (полнотекстовый поиск)
         │     ├── Page 2: NotesBrowser (карточки с бейджами)
+        │     │           └── NoteCard (ui/note_card.py)
         │     └── Page 3: GitHistory (асинхронный)
         │
         ├── Editor Area
         │     ├── TabBar (DraggableTabBar — перетаскивание, контекстное меню)
         │     ├── Page 0: CodeEditor + Preview (QSplitter)
         │     │     ├── CodeEditor (QPlainTextEdit + LineGutter + SyntaxHighlighter)
+        │     │     │     └── цвета подсветки из data/syntax_colors.json
         │     │     ├── CodeEditor2 (split-режим)
         │     │     └── PreviewWidget (рендер Markdown, только для .md/.markdown/.mdown)
         │     ├── Page 1: QWebEngineView (Chromium, для .html)

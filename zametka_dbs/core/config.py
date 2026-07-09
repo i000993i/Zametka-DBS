@@ -3,6 +3,8 @@ import logging
 import os
 import shutil
 
+from zametka_dbs.core.rust_bridge import HAS_RUST, RustConfig
+
 logger = logging.getLogger(__name__)
 
 CONFIG_VERSION = 1
@@ -30,8 +32,6 @@ _DEFAULTS = {
         "items": [],
     },
 }
-
-from zametka_dbs.core.rust_bridge import HAS_RUST, RustConfig
 
 
 class _PyConfig:

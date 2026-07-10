@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from PyQt6.QtWidgets import QTreeView, QMenu
+from PyQt6.QtWidgets import QTreeView, QMenu, QWidget
 from PyQt6.QtGui import QFileSystemModel, QStandardItemModel, QAction
 from PyQt6.QtCore import Qt, QDir, QModelIndex, pyqtSignal, QPoint, QSize
 

@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QTextBrowser, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QScrollArea
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QResizeEvent
+from PyQt6.QtWidgets import QTextBrowser, QWidget
+from PyQt6.QtCore import QTimer, QUrl, pyqtSignal
 
-from assets.icons import icon
 from zametka_dbs.preview.renderer import render_markdown
-from zametka_dbs.core.config import get_config
 from zametka_dbs.core.event_bus import get_bus, Events
-from zametka_dbs.ui.document_viewer import DocumentViewer
 
 
 class PreviewWidget(QTextBrowser):
@@ -38,6 +34,8 @@ class PreviewWidget(QTextBrowser):
         self._dark = theme == "dark"
         if self._pending:
             self.set_content(self._pending, self._note_map)
+        elif self._content:
+            self.set_content(self._content, self._note_map)
 
     def set_note_map(self, note_map: dict[str, str] | None) -> None:
         self._note_map = note_map

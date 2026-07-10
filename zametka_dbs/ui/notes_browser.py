@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import os
-
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
-    QPushButton, QLabel, QMenu, QFileDialog,
+    QPushButton, QLabel, QMenu, QFileDialog, QDialog,
 )
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
@@ -41,7 +39,8 @@ class NotesBrowser(QWidget):
         self._card_layout = card_layout
         layout.addWidget(self._scroll)
 
-        get_bus().subscribe(Events.THEME_CHANGED, lambda **_: self._rebuild())
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
+        get_bus().subscribe(Events.LANGUAGE_CHANGED, self._on_language_changed)
         self._rebuild()
 
     def _build_header(self) -> QWidget:
@@ -57,9 +56,9 @@ class NotesBrowser(QWidget):
         header_icon.setFixedWidth(16)
         header_layout.addWidget(header_icon)
 
-        header_label: QLabel = QLabel(tr("notes.header"))
-        header_label.setObjectName("notes-label")
-        header_layout.addWidget(header_label)
+        self._header_label: QLabel = QLabel(tr("notes.header"))
+        self._header_label.setObjectName("notes-label")
+        header_layout.addWidget(self._header_label)
 
         header_layout.addStretch()
 
@@ -163,6 +162,15 @@ class NotesBrowser(QWidget):
     def _remove_note(self, filepath: str) -> None:
         remove_note(filepath)
         self._rebuild()
+
+    def _on_theme_changed(self, **kwargs) -> None:
+        self._dark = get_config().get("theme", "dark") == "dark"
+        self._rebuild()
+
+    def _on_language_changed(self, **kwargs) -> None:
+        self._header_label.setText(tr("notes.header"))
+        self._add_file_btn.setText(tr("notes.add_btn"))
+        self._add_file_btn.setToolTip(tr("notes.add_tooltip"))
 
     def refresh(self) -> None:
         self._rebuild()

@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from assets.icons import icon
 from zametka_dbs.core.config import get_config
+from zametka_dbs.core.event_bus import get_bus, Events
 from zametka_dbs.ui.styles import _THEME_VARS
 from zametka_dbs.core.badges import (
     detect_file_badges, get_assigned_badges, badge_stylesheet,
@@ -32,6 +33,7 @@ class NoteCard(QFrame):
             f"border: 1px solid {_v['border2']}; "
             f"border-radius: 4px;"
         )
+        get_bus().subscribe(Events.THEME_CHANGED, self._on_theme_changed)
 
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -94,6 +96,15 @@ class NoteCard(QFrame):
         if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._filepath)
         super().mousePressEvent(event)
+
+    def _on_theme_changed(self, **kwargs) -> None:
+        self._dark = get_config().get("theme", "dark") == "dark"
+        _v = _THEME_VARS["dark" if self._dark else "light"]
+        self.setStyleSheet(
+            f"background-color: {_v['bg2']}; "
+            f"border: 1px solid {_v['border2']}; "
+            f"border-radius: 4px;"
+        )
 
     def filepath(self) -> str:
         return self._filepath

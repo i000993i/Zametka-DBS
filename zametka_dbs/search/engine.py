@@ -4,9 +4,9 @@ import math
 import logging
 from collections import Counter
 
-logger = logging.getLogger(__name__)
-
 from zametka_dbs.core.rust_bridge import HAS_RUST, RustSearchIndex as _RustSearchIndex
+
+logger = logging.getLogger(__name__)
 
 
 class SearchResult:

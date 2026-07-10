@@ -9,11 +9,11 @@ from urllib.error import URLError
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QProgressBar, QMessageBox,
+    QProgressBar,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QTimer
 
-from zametka_dbs.core.version import __version__, __api_url__, __repo__
+from zametka_dbs.core.version import __version__, __api_url__
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ class UpdateDialog(QDialog):
                         QTimer.singleShot(0, lambda v=pct: self._bar.setValue(v))
             QTimer.singleShot(0, self._finish_download)
         except Exception as e:
-            QTimer.singleShot(0, lambda: self._status.setText(f"Ошибка загрузки: {e}"))
+            QTimer.singleShot(0, lambda err=e: self._status.setText(f"Ошибка загрузки: {err}"))
 
     def _finish_download(self):
         from PyQt6.QtWidgets import QMessageBox

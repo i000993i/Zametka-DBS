@@ -11,7 +11,10 @@ def is_file_too_large(path: str, max_bytes: int = MAX_FILE_SIZE) -> bool:
 
 
 def format_size(path: str) -> str:
-    size = os.path.getsize(path)
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return "0 B"
     for unit in ("B", "KB", "MB", "GB"):
         if size < 1024:
             return f"{size:.1f} {unit}"

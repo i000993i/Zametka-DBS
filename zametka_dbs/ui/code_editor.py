@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from PyQt6.QtWidgets import QPlainTextEdit, QTextEdit, QWidget
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import (
     QResizeEvent,
     QTextCursor,

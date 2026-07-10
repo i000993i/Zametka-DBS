@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QSplitter, QLabel, QStatusBar,
-    QScrollArea, QFrame, QPushButton, QFileDialog, QMenu,
+    QFrame, QPushButton, QFileDialog, QMenu,
     QProgressBar, QLineEdit,
 )
 from PyQt6.QtCore import Qt, QPoint, QSize, QTimer
@@ -60,8 +60,15 @@ class MainWindow(QMainWindow):
         self._init_i18n()
         self._init_window()
         self._create_activity_bar()
-        self._create_sidebar()
+        self._create_status_bar()
         self._create_editor_area()
+        self._tab_manager = TabManager(
+            self.editor, self.preview, self.status_saved, self.status_info,
+            self._html_toggle_btn, self._main_stack, self._browser, self,
+            tab_bar=self._tab_bar,
+        )
+        self._tab_manager.connect_signals()
+        self._create_sidebar()
 
         self.editor._gutter.set_dark(get_config().get("theme", "dark") == "dark")
         self.editor2._gutter.set_dark(get_config().get("theme", "dark") == "dark")
@@ -76,18 +83,11 @@ class MainWindow(QMainWindow):
         self._wikilink_completer.activated.connect(self._on_wikilink_completed)
         self._wikilink_completer_visible = False
 
-        self._create_status_bar()
         self._setup_layout()
         self._vault_manager = VaultManager(
             self.file_tree, self._progress_bar, self.status_info,
             self.preview, self._resolver, self._search_engine, self,
         )
-        self._tab_manager = TabManager(
-            self.editor, self.preview, self.status_saved, self.status_info,
-            self._html_toggle_btn, self._main_stack, self._browser, self,
-            tab_bar=self._tab_bar,
-        )
-        self._tab_manager.connect_signals()
         self._create_menu_bar()
 
         self._connect_signals()
@@ -542,6 +542,7 @@ class MainWindow(QMainWindow):
 
     def _auto_check_updates(self):
         import threading
+
         def _check():
             try:
                 from zametka_dbs.core.updater import check_for_updates
@@ -692,7 +693,6 @@ class MainWindow(QMainWindow):
         self.preview.wikilink_clicked.connect(self._on_wikilink_clicked)
         self.preview.rendered.connect(self._on_preview_rendered)
         self.search_widget.result_clicked.connect(self._tab_manager.on_file_opened)
-        self.search_widget.replace_requested.connect(self._on_replace_in_file)
 
         self._tab_manager.save_requested.connect(self._save_current_file)
         self._tab_manager.save_as_requested.connect(self._save_as)
@@ -706,6 +706,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._vault_manager.stop_watcher()
+        self._vault_manager._cleanup_worker()
         super().closeEvent(event)
 
     def dragEnterEvent(self, event):
@@ -855,21 +856,12 @@ class MainWindow(QMainWindow):
         self.preview.setVisible(not visible)
         self._preview_visible = not visible
         if visible:
-            self._preview_toggle_btn.setToolTip("Show Preview (Ctrl+P)")
-            self._preview_toggle_btn.setIcon(icon("layout"))
+            self._preview_toggle_btn.setToolTip(tr("editor.tooltip.show_preview"))
+            self._preview_toggle_btn.setIcon(icon("eye-off"))
         else:
-            self._preview_toggle_btn.setToolTip("Hide Preview (Ctrl+P)")
-            self._preview_toggle_btn.setIcon(icon("layout"))
+            self._preview_toggle_btn.setToolTip(tr("editor.tooltip.hide_preview"))
+            self._preview_toggle_btn.setIcon(icon("eye"))
 
-    def _on_replace_in_file(self, find_text: str, replace_text: str):
-        content = self.editor.toPlainText()
-        new_content = content.replace(find_text, replace_text)
-        if new_content != content:
-            cursor = self.editor.textCursor()
-            pos = cursor.position()
-            self.editor.setPlainText(new_content)
-            cursor.setPosition(min(pos, len(new_content)))
-            self.editor.setTextCursor(cursor)
 
     def _on_wikilink_clicked(self, target: str):
         resolved = self._resolver.resolve(target)
@@ -889,7 +881,7 @@ class MainWindow(QMainWindow):
 
     def _sync_editor_scroll_to_preview(self, value=None, force=False):
         editor_sb = self.editor.verticalScrollBar()
-        preview_sb = self.preview._browser.verticalScrollBar()
+        preview_sb = self.preview.verticalScrollBar()
         if not editor_sb or not preview_sb:
             return
 
@@ -913,9 +905,9 @@ class MainWindow(QMainWindow):
         self._update_wikilink_completer()
         ext = os.path.splitext(self._tab_manager.current_file)[1].lower() if self._tab_manager.current_file else ""
         if ext in (".md", ".markdown", ".mdown", ".mdx"):
-            self.preview.update_content(self.editor.toPlainText())
+            self.preview.set_content(self.editor.toPlainText())
         else:
-            self.preview._browser.setHtml("<html><body style='color:#888;font-family:sans-serif;padding:2em'><p>Preview only available for Markdown files.</p></body></html>")
+            self.preview.setHtml("<html><body style='color:#888;font-family:sans-serif;padding:2em'><p>Preview only available for Markdown files.</p></body></html>")
         if self._tab_manager.current_file:
             self.status_saved.setText("Unsaved")
             self._tab_manager.mark_modified()

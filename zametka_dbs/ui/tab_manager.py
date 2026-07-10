@@ -5,7 +5,7 @@ import os
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import (
     QStackedWidget, QLabel, QPushButton, QInputDialog,
-    QApplication, QMessageBox,
+    QApplication, QMessageBox, QWidget,
 )
 
 from zametka_dbs.ui.code_editor import CodeEditor
@@ -318,9 +318,9 @@ class TabManager(QObject):
             self._status_saved.setText("Unsaved" if modified else "Saved")
             cached = state.get("html")
             if cached:
-                self._preview.set_html(cached)
+                self._preview.setHtml(cached)
             else:
-                self._preview.update_content(state["content"])
+                self._preview.set_content(state["content"])
 
     def _update_tab_meta(self, path: str, state: dict) -> None:
         is_untitled = path.startswith("__untitled_") if path else True

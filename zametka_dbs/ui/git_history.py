@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, QProcess, pyqtSignal
 
 from assets.icons import icon
+from zametka_dbs.core.i18n import tr
 
 
 class _GitWorker(QProcess):
@@ -54,6 +55,7 @@ class GitHistoryWidget(QWidget):
         self._vault_path: str = ""
         self._commit_cache: list[tuple[str, str, str, str]] = []
         self._worker: _GitWorker | None = None
+        self._workers: list[_GitWorker] = []
 
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -68,12 +70,12 @@ class GitHistoryWidget(QWidget):
         self._changes_list: QListWidget = QListWidget()
         self._changes_list.setObjectName("git-list")
         self._changes_list.itemClicked.connect(self._on_change_clicked)
-        self._tabs.addTab(self._changes_list, "Changes")
+        self._tabs.addTab(self._changes_list, tr("git_history.tab_changes"))
 
         self._list: QListWidget = QListWidget()
         self._list.setObjectName("git-list")
         self._list.itemClicked.connect(self._on_commit_clicked)
-        self._tabs.addTab(self._list, "Commits")
+        self._tabs.addTab(self._list, tr("git_history.tab_commits"))
 
         layout.addWidget(self._tabs, 1)
 
@@ -86,7 +88,7 @@ class GitHistoryWidget(QWidget):
         self._diff_view.setVisible(False)
         layout.addWidget(self._diff_view)
 
-        self._no_git_label: QLabel = QLabel("Not a git repository")
+        self._no_git_label: QLabel = QLabel(tr("git_history.not_repo"))
         self._no_git_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._no_git_label.setStyleSheet("font-size: 12px; padding: 20px;")
         layout.addWidget(self._no_git_label)
@@ -101,7 +103,7 @@ class GitHistoryWidget(QWidget):
         hdr_icon.setPixmap(icon("git-branch").pixmap(14, 14))
         hdr_icon.setFixedWidth(18)
         hdr.addWidget(hdr_icon)
-        hdr_label: QLabel = QLabel("HISTORY")
+        hdr_label: QLabel = QLabel(tr("git_history.header"))
         hdr_label.setObjectName("vault-label")
         hdr.addWidget(hdr_label)
         hdr.addStretch()
@@ -111,7 +113,7 @@ class GitHistoryWidget(QWidget):
         self._refresh_btn.setIconSize(QSize(14, 14))
         self._refresh_btn.setObjectName("icon-btn")
         self._refresh_btn.setFixedSize(22, 22)
-        self._refresh_btn.setToolTip("Refresh")
+        self._refresh_btn.setToolTip(tr("git_history.refresh_tooltip"))
         self._refresh_btn.clicked.connect(self._refresh)
         hdr.addWidget(self._refresh_btn)
         return header
@@ -171,8 +173,14 @@ class GitHistoryWidget(QWidget):
 
     def _run_git(self, args: list[str], callback: Callable[[str], None]) -> None:
         w: _GitWorker = _GitWorker(args, self._vault_path)
-        w.done.connect(lambda out, err: callback(out) if not err else None)
-        w.done.connect(lambda: w.deleteLater())
+        def _cleanup(out: str, err: str) -> None:
+            if not err:
+                callback(out)
+            if w in self._workers:
+                self._workers.remove(w)
+            w.deleteLater()
+        w.done.connect(_cleanup)
+        self._workers.append(w)
         w.start()
 
     def _on_status_ready(self, stdout: str) -> None:

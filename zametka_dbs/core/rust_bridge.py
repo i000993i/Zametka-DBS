@@ -27,5 +27,3 @@ except ImportError as e:
     rust_detect_language = None
     rust_scan_folder_languages = None
     rust_compute_line_numbers = None
-
-

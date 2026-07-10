@@ -27,6 +27,7 @@ a = Analysis(
         (str(ROOT / "assets" / "svg"), "assets/svg"),
         (str(ROOT / "assets" / "lang"), "assets/lang"),
         (str(ROOT / "assets" / "app_icon.ico"), "assets"),
+        (str(ROOT / "zametka_dbs" / "data"), "zametka_dbs/data"),
     ],
     hiddenimports=[
         "PyQt6.QtSvg",

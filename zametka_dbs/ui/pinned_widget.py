@@ -16,6 +16,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPoint
 from assets.icons import icon
 from zametka_dbs.core.config import get_config
 from zametka_dbs.core.event_bus import get_bus, Events
+from zametka_dbs.core.i18n import tr
 
 from zametka_dbs.core.rust_bridge import HAS_RUST
 from zametka_dbs.core.rust_bridge import rust_detect_language as _rust_detect
@@ -101,7 +102,7 @@ class PinnedWidget(QWidget):
         header_icon.setFixedWidth(16)
         header_layout.addWidget(header_icon)
 
-        header_label: QLabel = QLabel("PINNED")
+        header_label: QLabel = QLabel(tr("pinned.header"))
         header_label.setObjectName("pinned-label")
         header_layout.addWidget(header_label)
 
@@ -113,7 +114,7 @@ class PinnedWidget(QWidget):
         self._pin_btn.setObjectName("pinned-add-btn")
         self._pin_btn.setFixedSize(18, 18)
         self._pin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._pin_btn.setToolTip("Pin a file or folder")
+        self._pin_btn.setToolTip(tr("pinned.tooltip"))
         self._pin_btn.clicked.connect(self._show_pin_menu)
         header_layout.addWidget(self._pin_btn)
 
@@ -121,6 +122,7 @@ class PinnedWidget(QWidget):
 
     def _build_list(self) -> QListWidget:
         lst: QListWidget = QListWidget()
+        self._list = lst
         lst.setObjectName("pinned-list")
         lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         lst.customContextMenuRequested.connect(self._show_context_menu)

@@ -36,7 +36,10 @@ class TreeBranchStyle(QProxyStyle):
         has_children = bool(option.state & QStyle.StateFlag.State_Children)
 
         painter.save()
-        dark = getattr(widget, "_dark", True) if widget else True
+        from zametka_dbs.core.config import get_config
+        dark = getattr(widget, "_dark", None)
+        if dark is None:
+            dark = get_config().get("theme", "dark") == "dark"
         v = _THEME_VARS["dark" if dark else "light"]
         painter.setPen(QPen(QColor(v["border2"]), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)

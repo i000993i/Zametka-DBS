@@ -25,7 +25,7 @@ def test_pyconfig_nested():
         cfg = _PyConfig(tmp)
         cfg.set("editor.tab_size", 4)
         assert cfg.get("editor.tab_size") == 4
-        assert cfg.get("editor.font_size") is None
+        assert cfg.get("editor.font_size") == 14
 
 
 def test_config_version():
@@ -38,9 +38,7 @@ def test_pyconfig_persistence():
     with tempfile.TemporaryDirectory() as tmp:
         cfg = _PyConfig(tmp)
         cfg.set("vault_path", "/test")
-        path = cfg._path
     with tempfile.TemporaryDirectory() as tmp:
-        cfg2 = _PyConfig(tmp)
         with open(os.path.join(tmp, "config.json"), "w") as f:
             import json
             json.dump({"vault_path": "/test"}, f)

@@ -9,10 +9,12 @@ from PyQt6.QtWidgets import (
     QScrollArea, QSpinBox, QSlider, QComboBox, QSizePolicy, QMenu,
     QApplication,
 )
-from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QAction
-
+from PyQt6.QtCore import Qt, QSize, QTimer, QObject, QEvent, QPoint
+from PyQt6.QtGui import QPixmap, QKeyEvent, QImage, QAction, QResizeEvent
 from assets.icons import icon
+from zametka_dbs.core.config import get_config
+from zametka_dbs.ui.styles import _THEME_VARS
+
 
 _FITZ = None
 
@@ -175,11 +177,13 @@ class DocumentViewer(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._scroll.setStyleSheet("QScrollArea { background-color: #e8e8e8; border: none; }")
+        theme = get_config().get("theme", "dark")
+        _v = _THEME_VARS[theme]
+        self._scroll.setStyleSheet(f"QScrollArea {{ background-color: {_v['bg1']}; border: none; }}")
 
         self._container = QWidget()
         self._container.setObjectName("pdf-container")
-        self._container.setStyleSheet("background-color: #e8e8e8;")
+        self._container.setStyleSheet(f"background-color: {_v['bg1']};")
         self._page_layout = QVBoxLayout(self._container)
         self._page_layout.setContentsMargins(20, 10, 20, 10)
         self._page_layout.setSpacing(12)
@@ -647,4 +651,3 @@ class _PageWidget(QWidget):
     def show_error(self, msg: str) -> None:
         self._label.setText(f"[{msg}]")
         self._label.setPixmap(QPixmap())
-

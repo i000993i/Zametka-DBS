@@ -74,6 +74,7 @@ class VaultManager(QObject):
             self._status_info.setText(f"Vault: {dir_path}")
 
     def close_vault(self) -> None:
+        self._cleanup_worker()
         self.vault_closed.emit()
         if hasattr(self._file_tree, "clear_vault"):
             self._file_tree.clear_vault()
@@ -101,20 +102,20 @@ class VaultManager(QObject):
 
         self._cleanup_worker()
 
-        self._vault_thread = QThread()
-        self._vault_worker = VaultWorker(
+        thread = QThread()
+        worker = VaultWorker(
             vault_path, self._resolver, self._search_engine
         )
-        self._vault_worker.moveToThread(self._vault_thread)
-        self._vault_thread.started.connect(self._vault_worker.run)
-        self._vault_worker.finished.connect(self._vault_thread.quit)
-        self._vault_worker.finished.connect(self._vault_worker.deleteLater)
-        self._vault_thread.finished.connect(self._vault_thread.deleteLater)
-        self._vault_worker.progress.connect(self._on_progress)
-        self._vault_worker.finished.connect(
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(thread.quit)
+        worker.progress.connect(self._on_progress)
+        worker.finished.connect(
             lambda: self._on_finished(vault_path)
         )
-        self._vault_thread.start()
+        thread.start()
+        self._vault_thread = thread
+        self._vault_worker = worker
 
     def _on_progress(self, current: int, total: int, message: str) -> None:
         if total > 0:
@@ -145,6 +146,9 @@ class VaultManager(QObject):
             self._vault_worker.cancel()
             self._vault_worker = None
         if self._vault_thread is not None:
-            if self._vault_thread.isRunning():
-                self._vault_thread.quit()
+            old = self._vault_thread
             self._vault_thread = None
+            if old.isRunning():
+                old.quit()
+                old.wait(3000)
+            old.deleteLater()

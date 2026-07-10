@@ -15,7 +15,7 @@ from zametka_dbs.core.badges import (
 
 
 class BadgeItemWidget(QWidget):
-    def __init__(self, badge: dict) -> None:
+    def __init__(self, badge: dict, fg2: str = "#808080") -> None:
         super().__init__()
         self._badge: dict = badge
         layout: QHBoxLayout = QHBoxLayout(self)
@@ -23,7 +23,7 @@ class BadgeItemWidget(QWidget):
         layout.setSpacing(8)
 
         cat: QLabel = QLabel(badge["category"])
-        cat.setStyleSheet(f"color: {_THEME_VARS['dark']['fg2']}; font-size: 9px; font-weight: 600;")
+        cat.setStyleSheet(f"color: {fg2}; font-size: 9px; font-weight: 600;")
         cat.setFixedWidth(90)
         layout.addWidget(cat)
 
@@ -101,7 +101,8 @@ class BadgeSelectDialog(QDialog):
                 continue
             item: QListWidgetItem = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, b["label"])
-            widget: BadgeItemWidget = BadgeItemWidget(b)
+            _v = _THEME_VARS[get_config().get("theme", "dark")]
+            widget: BadgeItemWidget = BadgeItemWidget(b, fg2=_v["fg2"])
             item.setSizeHint(widget.sizeHint())
             self._list.addItem(item)
             self._list.setItemWidget(item, widget)

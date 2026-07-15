@@ -46,8 +46,11 @@ jobs:
       - name: Build Rust core
         run: python -m maturin develop --release --manifest-path zametka-core/Cargo.toml
 
-      - name: Build with PyInstaller
+      - name: Build app with PyInstaller
         run: python -m PyInstaller Zametka.spec --clean --noconfirm
+
+      - name: Build installer with PyInstaller
+        run: python -m PyInstaller installer/installer.py --onefile --windowed --icon=assets/app_icon.ico --name Zametka-Installer --distpath dist
 
       - name: Create release zip
         run: |
@@ -63,4 +66,5 @@ jobs:
           files: |
             Zametka-Latest.zip
             Zametka-Latest.zip.sha256
+            dist/Zametka-Installer.exe
           generate_release_notes: true

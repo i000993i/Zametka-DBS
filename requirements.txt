@@ -7,3 +7,4 @@ winshell>=0.6
 pywin32>=306
 PyMuPDF
 pyinstaller>=6.0
+maturin>=1.0,<2.0

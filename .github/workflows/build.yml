@@ -43,7 +43,9 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Build Rust core
-        run: python -m maturin develop --release --manifest-path zametka-core/Cargo.toml
+        run: |
+          python -m maturin build --release --manifest-path zametka-core/Cargo.toml --out wheelhouse
+          pip install wheelhouse/zametka_core-*.whl
 
       - name: Build app with PyInstaller
         run: python -m PyInstaller Zametka.spec --clean --noconfirm

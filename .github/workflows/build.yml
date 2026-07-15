@@ -43,6 +43,8 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Build Rust core
+        env:
+          RUSTFLAGS: ""
         run: |
           python -m maturin build --release --manifest-path zametka-core/Cargo.toml --out wheelhouse
           pip install wheelhouse/zametka_core-*.whl

@@ -95,6 +95,10 @@ class MainWindow(QMainWindow):
         self.bus.emit(Events.APP_READY)
         QTimer.singleShot(2000, self._auto_check_updates)
 
+    def open_file(self, path: str) -> None:
+        if os.path.isfile(path):
+            self._tab_manager.on_file_opened(path)
+
     def _make_btn(self, icon_name, object_name, tooltip, slot, text="",
                   icon_size=QSize(14, 14), fixed_height=None, fixed_size=None,
                   checkable=False, visible=True):

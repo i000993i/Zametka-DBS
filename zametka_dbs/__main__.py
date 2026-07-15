@@ -56,6 +56,12 @@ def main():
     except Exception as e:
         logger.warning(f"File assoc registration: {e}")
 
+    # Open file passed as command-line argument (e.g., from Explorer)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if args:
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: window.open_file(args[0]))
+
     sys.exit(app.exec())
 
 

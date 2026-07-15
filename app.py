@@ -88,6 +88,13 @@ def main():
         window.activateWindow()
 
         register_on_startup()
+
+        # Open file passed as command-line argument (e.g., from Explorer)
+        args = [a for a in sys.argv[1:] if not a.startswith("--")]
+        if args:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: window.open_file(args[0]))
+
         sys.exit(app.exec())
     except Exception:
         exc_info = sys.exc_info()

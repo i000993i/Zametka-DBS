@@ -47,7 +47,8 @@ jobs:
           RUSTFLAGS: ""
         run: |
           python -m maturin build --release --manifest-path zametka-core/Cargo.toml --out wheelhouse
-          pip install wheelhouse/zametka_core-*.whl
+          $wheel = (Get-ChildItem -Path wheelhouse -Filter *.whl | Select-Object -First 1).FullName
+          pip install "$wheel"
 
       - name: Build app with PyInstaller
         run: python -m PyInstaller Zametka.spec --clean --noconfirm

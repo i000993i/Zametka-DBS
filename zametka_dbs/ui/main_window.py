@@ -153,8 +153,6 @@ class MainWindow(QMainWindow):
     def _retranslate_ui(self):
         config = get_config()
         current_theme = config.get("theme", "dark")
-        self._lang_btn.setText(tr("status.lang"))
-        self._lang_btn.setToolTip(tr("status.lang_tooltip"))
         self._activity_bar.set_button_tooltip(0, tr("activity.explorer"))
         self._activity_bar.set_button_tooltip(1, tr("activity.search"))
         self._activity_bar.set_button_tooltip(2, tr("activity.notes"))
@@ -188,6 +186,11 @@ class MainWindow(QMainWindow):
         self._act_split.setText(tr("menu.view.split_editor"))
         self._act_theme.setText(
             tr("menu.view.dark_theme") if current_theme == "light" else tr("menu.view.light_theme")
+        )
+        self._lang_menu.setTitle(tr("menu.language"))
+        lang = current_language()
+        self._act_lang.setText(
+            tr("menu.language.switch_to_en") if lang == "ru" else tr("menu.language.switch_to_ru")
         )
         self._ref_menu.setTitle(tr("menu.help"))
         self._act_handbook.setText(tr("menu.help.handbook"))
@@ -409,10 +412,6 @@ class MainWindow(QMainWindow):
 
         self.status_info = QLabel(tr("status.ready"))
 
-        self._lang_btn = self._make_btn(
-            None, "lang-btn", None, self._toggle_language,
-            fixed_size=QSize(26, 20))
-
         self._progress_bar = QProgressBar()
         self._progress_bar.setObjectName("status-progress")
         self._progress_bar.setFixedWidth(160)
@@ -427,7 +426,6 @@ class MainWindow(QMainWindow):
         self.status_bar.addPermanentWidget(self.status_cursor)
         self.status_bar.addPermanentWidget(self.status_words)
         self.status_bar.addPermanentWidget(self.status_font)
-        self.status_bar.addPermanentWidget(self._lang_btn)
         self.status_bar.addPermanentWidget(self._progress_bar)
         self.status_bar.addPermanentWidget(self.status_info)
 
@@ -466,6 +464,7 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
         self._build_file_menu(mb)
         self._build_view_menu(mb)
+        self._build_lang_menu(mb)
         self._build_help_menu(mb)
 
     def _build_file_menu(self, mb):
@@ -517,6 +516,12 @@ class MainWindow(QMainWindow):
         )
         self._act_theme.triggered.connect(self._toggle_theme)
         self._view_menu.addAction(self._act_theme)
+
+    def _build_lang_menu(self, mb):
+        self._lang_menu = mb.addMenu(tr("menu.language"))
+        self._act_lang = QAction(self)
+        self._act_lang.triggered.connect(self._toggle_language)
+        self._lang_menu.addAction(self._act_lang)
 
     def _build_help_menu(self, mb):
         self._ref_menu = mb.addMenu(tr("menu.help"))

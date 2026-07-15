@@ -2,7 +2,10 @@
 ; Build with Inno Setup Compiler (https://jrsoftware.org/isinfo.php)
 
 #define MyAppName "Zametka"
-#define MyAppVersion "0.3.0"
+; NOTE: Python installer (installer/installer.py) is the primary installer.
+; This Inno Setup script is kept as an alternative for advanced users.
+; Version must match zametka_dbs/core/version.py.
+#define MyAppVersion "0.3.2"
 #define MyAppPublisher "Zametka Team"
 #define MyAppURL "https://github.com/i000993i/Zametka-DBS"
 #define MyAppExeName "Zametka.exe"

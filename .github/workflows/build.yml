@@ -35,7 +35,16 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+
       - run: pip install -r requirements.txt
+
+      - name: Build Rust core
+        run: python -m maturin develop --release --manifest-path zametka-core/Cargo.toml
 
       - name: Build with PyInstaller
         run: python -m PyInstaller Zametka.spec --clean --noconfirm

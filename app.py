@@ -87,8 +87,6 @@ def main():
         window.raise_()
         window.activateWindow()
 
-        register_on_startup()
-
         # Open file passed as command-line argument (e.g., from Explorer)
         args = [a for a in sys.argv[1:] if not a.startswith("--")]
         if args:
@@ -104,17 +102,6 @@ def main():
             traceback.format_exc(),
         )
         sys.exit(1)
-
-
-def register_on_startup():
-    try:
-        exe = os.path.abspath(sys.executable)
-        if exe.endswith(("python.exe", "pythonw.exe")):
-            exe = ""
-        from zametka_dbs.core.file_assoc import register_file_associations
-        register_file_associations(exe)
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"File assoc registration: {e}")
 
 
 if __name__ == "__main__":

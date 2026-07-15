@@ -19,6 +19,13 @@ if _rust_pkg.exists():
         if f.suffix in (".pyd", ".dll"):
             _rust_binaries.append((str(f), "zametka_core"))
 
+if not _rust_binaries:
+    raise SystemExit(
+        "ERROR: Rust core (zametka_core .pyd) not found!\n"
+        "Run 'python -m maturin develop --release' first, or set the\n"
+        "ZAMETKA_SKIP_RUST environment variable to bypass this check."
+    )
+
 a = Analysis(
     ["app.py"],
     pathex=[str(ROOT)],
